@@ -2,10 +2,8 @@ import { generateObject } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schema";
 import { getEbayComps } from "@/lib/ebay";
-
-// Vision model routed through the Vercel AI Gateway (needs AI_GATEWAY_API_KEY locally,
-// or OIDC when running on Vercel / via `vercel dev`).
-const MODEL = "anthropic/claude-haiku-4-5";
+import { getWebComps } from "@/lib/webcomps";
+import { withModelFallback } from "@/lib/model";
 
 export const maxDuration = 60;
 
@@ -23,7 +21,10 @@ If the image is unclear or the item is hard to identify, lower your confidence a
 
 export async function POST(req: NextRequest) {
   try {
-    const { image } = (await req.json()) as { image?: string };
+    const { image, description } = (await req.json()) as {
+      image?: string;
+      description?: string;
+    };
 
     if (!image || !image.startsWith("data:image/")) {
       return NextResponse.json(
@@ -32,47 +33,74 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 1. Identify the item and produce a first-pass analysis + an eBay search query.
-    const { object: analysis } = await generateObject({
-      model: MODEL,
-      schema: analysisSchema,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "Analyze this clothing item for resale and fill out the listing analysis.",
-            },
-            { type: "image", image },
-          ],
-        },
-      ],
-    });
+    const sellerNotes =
+      typeof description === "string" ? description.trim().slice(0, 500) : "";
 
-    // 2. Pull real comparable prices from eBay (active listings). Non-fatal if it fails.
-    let marketData = null;
-    try {
-      marketData = await getEbayComps(analysis.ebaySearchQuery);
-    } catch (e) {
-      console.error("eBay lookup failed:", e);
-    }
+    // 1. Identify the item and produce a first-pass analysis + an eBay search query.
+    const { object: analysis } = await withModelFallback((model) =>
+      generateObject({
+        model,
+        schema: analysisSchema,
+        system: SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Analyze this clothing item for resale and fill out the listing analysis.${
+                  sellerNotes
+                    ? `\n\nThe seller adds these details about the item (trust them for facts the photo can't show, like brand, size, or era, and work them into the search query): ${sellerNotes}`
+                    : ""
+                }`,
+              },
+              { type: "image", image },
+            ],
+          },
+        ],
+      })
+    );
+
+    // 2. Pull comps in parallel: eBay API listings + a Google-style web search across
+    //    resale marketplaces. Both are non-fatal if they fail.
+    const itemContext = `${analysis.title} — brand ${analysis.brand}, type ${analysis.itemType}, color ${analysis.color}, condition ${analysis.condition}${
+      sellerNotes ? `. Seller notes: ${sellerNotes}` : ""
+    }`;
+    const [ebayResult, webResult] = await Promise.allSettled([
+      getEbayComps(analysis.ebaySearchQuery),
+      getWebComps(analysis.ebaySearchQuery, itemContext),
+    ]);
+    const marketData = ebayResult.status === "fulfilled" ? ebayResult.value : null;
+    if (ebayResult.status === "rejected") console.error("eBay lookup failed:", ebayResult.reason);
+    const webComps = webResult.status === "fulfilled" ? webResult.value : null;
+    if (webResult.status === "rejected") console.error("Web comps lookup failed:", webResult.reason);
 
     // 3. If we have real comps, re-price the item grounded on that data.
-    if (marketData) {
+    if (marketData || webComps) {
       try {
-        const { object: pricing } = await generateObject({
-          model: MODEL,
-          schema: pricingSchema,
-          system:
-            "You price secondhand clothing for resale. Given an item and live eBay comps (current active listings, which tend to run slightly above final sold prices), set a realistic price to sell reasonably quickly. Discard obvious outliers and unrelated results.",
-          prompt: `Item: ${analysis.title} — brand ${analysis.brand}, condition ${analysis.condition}, type ${analysis.itemType}.
+        const { object: pricing } = await withModelFallback((model) =>
+          generateObject({
+            model,
+            schema: pricingSchema,
+            system:
+              "You price secondhand clothing for resale. Given an item and live comps (current active listings, which tend to run slightly above final sold prices), set a realistic price to sell reasonably quickly. Discard obvious outliers and unrelated results.",
+            prompt: `Item: ${analysis.title} — brand ${analysis.brand}, condition ${analysis.condition}, type ${analysis.itemType}.
 Your earlier estimate: $${analysis.priceLow}–$${analysis.priceHigh} (suggested $${analysis.suggestedPrice}).
-Live eBay comps for "${analysis.ebaySearchQuery}": ${marketData.sampleSize} listings, 10th pct $${marketData.low}, median $${marketData.median}, 90th pct $${marketData.high}.
-Sample listings: ${marketData.samples.map((s) => `"${s.title}" $${s.price}`).join("; ")}.
+${
+  marketData
+    ? `Live eBay comps for "${analysis.ebaySearchQuery}": ${marketData.sampleSize} listings, 10th pct $${marketData.low}, median $${marketData.median}, 90th pct $${marketData.high}.
+Sample listings: ${marketData.samples.map((s) => `"${s.title}" $${s.price}`).join("; ")}.`
+    : ""
+}
+${
+  webComps
+    ? `Similar listings found via web search across resale marketplaces: ${webComps.sampleSize} listings, range $${webComps.low}–$${webComps.high}, average $${webComps.average}, median $${webComps.median}.
+Listings: ${webComps.listings.map((l) => `[${l.source}] "${l.title}" $${l.price}`).join("; ")}.`
+    : ""
+}
 Return a final price range and suggested price in USD.`,
-        });
+          })
+        );
         analysis.priceLow = pricing.priceLow;
         analysis.priceHigh = pricing.priceHigh;
         analysis.suggestedPrice = pricing.suggestedPrice;
@@ -82,7 +110,7 @@ Return a final price range and suggested price in USD.`,
       }
     }
 
-    const response: AnalyzeResponse = { ...analysis, marketData };
+    const response: AnalyzeResponse = { ...analysis, marketData, webComps };
     return NextResponse.json(response);
   } catch (err) {
     console.error("Analyze error:", err);

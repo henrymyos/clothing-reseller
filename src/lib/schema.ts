@@ -83,4 +83,26 @@ export type MarketData = {
   samples: MarketSample[];
 };
 
-export type AnalyzeResponse = Analysis & { marketData: MarketData | null };
+// Similar listings found via web search (Google-style, across resale marketplaces).
+export type WebListing = {
+  title: string;
+  price: number;
+  url: string;
+  source: string; // e.g. "eBay", "Depop", "Poshmark"
+};
+
+export type WebMarketData = {
+  query: string;
+  sampleSize: number;
+  currency: string;
+  low: number;
+  high: number;
+  average: number;
+  median: number;
+  listings: WebListing[];
+};
+
+export type AnalyzeResponse = Analysis & {
+  marketData: MarketData | null;
+  webComps: WebMarketData | null;
+};

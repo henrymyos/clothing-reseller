@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { Analysis, AnalyzeResponse } from "@/lib/schema";
+import type { Analysis, AnalyzeResponse, WebMarketData } from "@/lib/schema";
 
 type Status = "idle" | "loading" | "done" | "error";
 
@@ -19,6 +19,7 @@ const platformColor: Record<Analysis["platform"], string> = {
 
 export default function Home() {
   const [image, setImage] = useState<string | null>(null);
+  const [description, setDescription] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export default function Home() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image }),
+        body: JSON.stringify({ image, description: description.trim() || undefined }),
       });
       const text = await res.text();
       let data: AnalyzeResponse & { error?: string };
@@ -113,6 +114,15 @@ export default function Home() {
             onChange={(e) => e.target.files?.[0] && onPick(e.target.files[0])}
           />
 
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            maxLength={500}
+            rows={2}
+            placeholder="Optional: describe the item — brand, size, era, anything the photo doesn't show. This sharpens the search for similar listings."
+            className="mt-4 w-full resize-none rounded-xl border border-neutral-300 bg-white p-3 text-sm placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none"
+          />
+
           <div className="mt-4 flex gap-3">
             <button
               onClick={() => fileInputRef.current?.click()}
@@ -169,8 +179,13 @@ export default function Home() {
                     ✓ Based on {result.marketData.sampleSize} live eBay listings (median $
                     {result.marketData.median})
                   </p>
+                ) : result.webComps ? (
+                  <p className="mt-2 inline-block rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+                    ✓ Based on {result.webComps.sampleSize} similar web listings (avg $
+                    {result.webComps.average})
+                  </p>
                 ) : (
-                  <p className="mt-2 text-xs text-neutral-400">AI estimate (no live eBay data)</p>
+                  <p className="mt-2 text-xs text-neutral-400">AI estimate (no live market data)</p>
                 )}
               </div>
             </div>
@@ -198,6 +213,9 @@ export default function Home() {
                 </ul>
               </div>
             )}
+
+            {/* Similar listings from web search */}
+            {result.webComps && <WebCompsCard data={result.webComps} />}
 
             {/* Listing */}
             <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
@@ -275,6 +293,75 @@ function resizeImage(file: File, maxDim: number, quality: number): Promise<strin
     };
     img.src = url;
   });
+}
+
+const sourceColor: Record<string, string> = {
+  eBay: "bg-blue-100 text-blue-700",
+  Depop: "bg-red-100 text-red-700",
+  Poshmark: "bg-rose-100 text-rose-700",
+  Mercari: "bg-orange-100 text-orange-700",
+  Grailed: "bg-neutral-200 text-neutral-700",
+  Vinted: "bg-teal-100 text-teal-700",
+};
+
+function WebCompsCard({ data }: { data: WebMarketData }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? data.listings : data.listings.slice(0, 4);
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+        Similar listings on the web
+      </p>
+
+      <div className="mt-3 flex items-baseline gap-6">
+        <div>
+          <p className="text-2xl font-bold">
+            ${data.low}–${data.high}
+          </p>
+          <p className="text-xs text-neutral-400">Price range</p>
+        </div>
+        <div>
+          <p className="text-2xl font-bold">${data.average}</p>
+          <p className="text-xs text-neutral-400">Average of {data.sampleSize} listings</p>
+        </div>
+      </div>
+
+      <ul className="mt-4 space-y-2">
+        {visible.map((l) => (
+          <li key={l.url} className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                  sourceColor[l.source] ?? "bg-neutral-100 text-neutral-600"
+                }`}
+              >
+                {l.source}
+              </span>
+              <a
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="truncate text-blue-600 hover:underline"
+              >
+                {l.title}
+              </a>
+            </div>
+            <span className="shrink-0 font-medium">${l.price}</span>
+          </li>
+        ))}
+      </ul>
+
+      {data.listings.length > 4 && (
+        <button
+          onClick={() => setShowAll((s) => !s)}
+          className="mt-3 w-full rounded-lg border border-neutral-200 py-2 text-sm font-medium text-neutral-600 transition hover:bg-neutral-50"
+        >
+          {showAll ? "Show fewer" : `See all ${data.listings.length} listings`}
+        </button>
+      )}
+    </div>
+  );
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
