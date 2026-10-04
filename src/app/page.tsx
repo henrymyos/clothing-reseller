@@ -214,9 +214,14 @@ function Results({ result, draft, setDraft, sku }: { result: AnalyzeResponse; dr
             ★ Based on {result.mySales.matches.length} of your own sales (median ${result.mySales.matchedMedian})
           </p>
         )}
+        {result.priceBasis === "family" && result.mySales?.familyMedian != null && (
+          <p className="mt-2 mr-2 inline-block rounded-full bg-blush px-2.5 py-0.5 text-xs font-semibold text-cherry">
+            ★ Based on your typical ${result.mySales.familyMedian} for this kind of item ({result.mySales.familyCount} sales)
+          </p>
+        )}
         {result.comps ? (
           <p className="mt-2 inline-block rounded-full bg-sage-soft px-2.5 py-0.5 text-xs font-semibold text-sage">
-            ✓ Based on {result.comps.sampleSize} matching Depop listings (median ${result.comps.median})
+            ✓ {result.priceBasis === "comps" ? "Based on" : "Checked against"} {result.comps.sampleSize} matching Depop listings (median ${result.comps.median})
           </p>
         ) : (
           <p className="mt-2 text-xs text-muted">Estimate from the photos — not enough close Depop matches to ground it. Check Depop before pricing.</p>

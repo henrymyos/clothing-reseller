@@ -149,7 +149,7 @@ function Recs({ recs }: { recs: Rec[] }) {
     <div className="grid gap-3 sm:grid-cols-2">
       {recs.map((r) => (
         <div key={r.title} className={`rounded-2xl border p-4 card-shadow ${r.kind === "buy" ? "border-sage/30 bg-sage-soft" : r.kind === "skip" ? "border-honey/30 bg-honey-soft" : "border-line bg-surface"}`}>
-          <p className="font-semibold"><span aria-hidden className="mr-1.5">{REC_ICON[r.kind]}</span>{r.title}</p>
+          <p className="font-semibold"><span aria-hidden className="mr-2">{REC_ICON[r.kind]}</span>{r.title}</p>
           <p className="mt-1 text-sm text-ink-soft">{r.detail}</p>
         </div>
       ))}
@@ -225,7 +225,7 @@ function OrdersImport({ store, onChange }: { store: SalesStore | null; onChange:
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold">Depop sales export</p>
-          <p className="truncate text-xs text-muted">{store ? `${store.sales.length} orders · ${store.fileName}` : "A CSV of your Depop sales — sizes, brands and full titles. Also used to price new listings."}</p>
+          <p className="text-xs text-muted">{store ? `${store.sales.length} orders · ${store.fileName}` : "A CSV of your Depop sales — sizes, brands and full titles. Also used to price new listings."}</p>
         </div>
         <div className="flex shrink-0 gap-2">
           {store && <button type="button" onClick={() => { onChange(null); setMsg({ text: "Depop orders removed from this device." }); }} className="rounded-lg px-2 py-1.5 text-xs text-muted hover:text-cherry">Remove</button>}
@@ -280,7 +280,7 @@ function ImportCard({ store, onChange }: { store: InventoryStore | null; onChang
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-semibold">Your inventory sheet</p>
-          <p className="truncate text-xs text-muted">
+          <p className="text-xs text-muted">
             {store ? `${store.items.length} items · ${store.source} · updated ${new Date(store.importedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : "Paste or link the sheet where you track cost, listing and sale prices."}
           </p>
         </div>
@@ -397,9 +397,23 @@ function StaleCard({ r, staleDays }: { r: Report; staleDays: number }) {
   );
 }
 
+// A table on wider screens; on a phone each row becomes a small block so no column is hidden.
 function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) {
   return (
-    <div className="-mx-1 mt-3 overflow-x-auto">
+    <>
+    <ul className="mt-3 divide-y divide-line sm:hidden">
+      {rows.map((row, i) => (
+        <li key={i} className="py-2 text-sm">
+          <p className="font-medium">{row[0]}</p>
+          <dl className="mt-1 grid grid-cols-3 gap-x-3 gap-y-1 text-xs">
+            {row.slice(1).map((c, j) => (
+              <div key={j} className="min-w-0"><dt className="truncate text-muted">{head[j + 1]}</dt><dd className="font-semibold tabular-nums">{c}</dd></div>
+            ))}
+          </dl>
+        </li>
+      ))}
+    </ul>
+    <div className="-mx-1 mt-3 hidden overflow-x-auto sm:block">
       <table className="w-full min-w-[480px] text-sm">
         <thead><tr className="text-left text-xs text-muted">{head.map((h, i) => <th key={h} className={`px-1 pb-1 font-medium ${i ? "text-right" : ""}`}>{h}</th>)}</tr></thead>
         <tbody className="divide-y divide-line">
@@ -407,6 +421,7 @@ function Table({ head, rows }: { head: string[]; rows: (string | number)[][] }) 
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
@@ -443,7 +458,7 @@ function Hauls({ r }: { r: Report }) {
     <Card>
       <Label>Sourcing trips</Label>
       <p className="mt-1 text-xs text-muted">Everything bought on the same day, and whether it has paid for itself yet.</p>
-      <Table head={["Bought", "Items", "Sold", "Spent", "Paid out", "Profit so far", ""]}
+      <Table head={["Bought", "Items", "Sold", "Spent", "Paid out", "Profit so far", "Status"]}
         rows={r.hauls.map((h) => [shortDate(h.date), h.sold + h.unsold, h.sold, usd(h.spent, 0), usd(h.returned, 0), usd(h.totalProfit, 0), h.paidBack ? "✓ paid back" : `${usd(h.spent - h.returned, 0)} to go`])} />
     </Card>
   );
@@ -501,7 +516,7 @@ function AllItems({ items }: { items: ItemCalc[] }) {
     <Card>
       <Label>Every item</Label>
       <div className="mt-3 flex flex-wrap gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or SKU" className={`${input} min-w-0 flex-1`} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or SKU" className={`${input} min-w-0 basis-full sm:basis-auto sm:flex-1`} />
         <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} className={inline}>
           <option value="all">All</option><option value="sold">Sold</option><option value="unsold">Unsold</option>
         </select>

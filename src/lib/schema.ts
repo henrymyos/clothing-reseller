@@ -89,4 +89,9 @@ export type Comps = {
   listings: CompListing[];
 };
 
-export type AnalyzeResponse = Analysis & { comps: Comps | null; mySales: import("@/lib/sales").MySales | null; photoCount: number };
+export type AnalyzeResponse = Analysis & {
+  comps: Comps | null;
+  mySales: import("@/lib/sales").MySales | null;
+  priceBasis?: import("@/lib/pricing").PriceBasis; // what the price is anchored on
+  photoCount: number;
+};

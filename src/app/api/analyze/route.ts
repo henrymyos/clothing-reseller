@@ -1,11 +1,11 @@
 import { generateObject } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schema";
-import { getDepopComps, quantile } from "@/lib/comps";
+import { getDepopComps } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
 import { MAX_HASHTAGS, cleanHashtag } from "@/lib/depop";
 import { cleanSales, matchMySales } from "@/lib/sales";
-import { explainPrice } from "@/lib/pricing";
+import { explainPrice, finalPrice, priceAnchor, type PriceBasis } from "@/lib/pricing";
 
 export const maxDuration = 60;
 
@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
     const hasMine = !!mySales && (mySales.matches.length > 0 || mySales.familyMedian != null);
 
     // 4. Re-price on her sales + the matched Depop listings.
+    let priceBasis: PriceBasis = "photos";
     if (comps || hasMine) {
       try {
         const mineBlock = mySales && hasMine
@@ -111,23 +112,12 @@ Return the final range and suggested price in USD, citing her sales when they ex
           }),
           { timeoutMs: 12_000 }
         );
-        // Anchor: her own matched sold prices when she has 2+, else the closest Depop
-        // matches (asking prices run high, so the cap sits just above them).
-        const myPrices = (mySales?.matches ?? []).map((s) => s.price).sort((x, y) => x - y);
-        const close = (comps?.listings ?? []).filter((l) => l.similarity >= 85).map((l) => l.price).sort((x, y) => x - y);
-        const anchor = myPrices.length >= 2 ? quantile(myPrices, 0.5)
-          : comps ? (close.length >= 3 ? quantile(close, 0.5) : comps.median)
-          : mySales?.familyMedian ?? null;
-        const cap = anchor != null ? Math.round(anchor * (myPrices.length >= 2 ? 1.2 : 1.1)) : Infinity;
-        // A floor too, so run-to-run wobble in reading the photos can't undersell
-        // her — only a Fair-condition item may go well under the evidence.
-        const floor = anchor != null && analysis.condition !== "Used - Fair" ? Math.round(anchor * 0.7) : 1;
-        const suggested = Math.max(floor, 1, Math.min(Math.round(pricing.suggestedPrice), cap));
-        // The range is the middle half of her matched sales (or the Depop matches), always containing the suggestion.
-        const band = myPrices.length >= 2 ? myPrices : comps ? comps.listings.map((l) => l.price).sort((x, y) => x - y) : [];
-        analysis.suggestedPrice = suggested;
-        analysis.priceLow = band.length ? Math.min(Math.round(quantile(band, 0.25)), suggested) : Math.min(Math.round(pricing.priceLow), suggested);
-        analysis.priceHigh = band.length ? Math.max(Math.round(quantile(band, 0.75)), suggested) : Math.max(Math.round(pricing.priceHigh), suggested);
+        const a = priceAnchor(mySales, comps);
+        const p = finalPrice(pricing.suggestedPrice, pricing.priceLow, pricing.priceHigh, a, analysis.condition);
+        analysis.suggestedPrice = p.suggested;
+        analysis.priceLow = p.low;
+        analysis.priceHigh = p.high;
+        priceBasis = a.basis;
         // The explanation is written here from the real evidence, not by the model —
         // it can't invent sales she didn't make or quote numbers that disagree with
         // the final price and range shown.
@@ -137,7 +127,7 @@ Return the final range and suggested price in USD, citing her sales when they ex
       }
     }
 
-    const response: AnalyzeResponse = { ...analysis, comps, mySales: hasMine ? mySales : null, photoCount: images.length };
+    const response: AnalyzeResponse = { ...analysis, comps, mySales: hasMine ? mySales : null, priceBasis, photoCount: images.length };
     return NextResponse.json(response);
   } catch (err) {
     console.error("Analyze error:", err);
