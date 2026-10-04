@@ -1,32 +1,40 @@
 import { describe, it, expect } from "vitest";
-import { buildDescription, cleanHashtag, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
+import { buildDescription, cleanHashtag, enrichHeadline, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
 
 const draft = (over: Partial<ListingDraft> = {}): ListingDraft => ({
-  headline: "Vintage 90s Carhartt Detroit Jacket Brown XL",
-  body: "Faded duck canvas with a blanket lining. Boxy fit.",
-  brand: "Carhartt", size: "XL", condition: "Used - Good", material: "100% cotton duck",
+  headline: "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining",
+  size: "XL", sku: "0190",
   flaws: ["small mark on left cuff"], measurementKind: "top",
   measurements: { pit: "26", length: "28", sleeve: "" }, hashtags: ["#Carhartt", "workwear", "vintage jacket"],
   ...over,
 });
 
 describe("buildDescription", () => {
-  it("lays out headline, pitch, facts and hashtags in order", () => {
-    const d = buildDescription(draft());
-    expect(d.split("\n\n")[0]).toBe("Vintage 90s Carhartt Detroit Jacket Brown XL");
-    expect(d).toContain("Brand: Carhartt\nSize: XL");
-    expect(d).toContain('Measurements (laid flat): Pit to pit 26" · Length 28"');
-    expect(d).not.toContain("Sleeve"); // blank measurements are skipped
-    expect(d).toContain("Condition: Used - Good — small mark on left cuff (pictured)");
-    expect(d).toContain("Material: 100% cotton duck");
-    expect(d.trim().endsWith("#carhartt #workwear #vintagejacket")).toBe(true);
+  it("lays it out like her listings: first line, size, flaws, then SKU and hashtags", () => {
+    expect(buildDescription(draft())).toBe(
+      "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining\n" +
+      "size XL\n" +
+      "small mark on left cuff (pictured)\n" +
+      'measurements laid flat: pit to pit 26", length 28"\n\n' +
+      "0190\n" +
+      "#carhartt #workwear #vintagejacket",
+    );
   });
 
-  it("omits unknown brand, invisible size, unknown material and empty flaws", () => {
-    const d = buildDescription(draft({ brand: "Unbranded", size: "Not visible", material: "Unknown", flaws: ["  "], measurements: {} }));
-    expect(d).not.toMatch(/Brand:|Size:|Material:|Measurements/);
-    expect(d).toContain("Condition: Used - Good");
-    expect(d).not.toContain("pictured");
+  it("has no brand, condition, material or pitch lines", () => {
+    const d = buildDescription(draft());
+    expect(d).not.toMatch(/Brand:|Condition:|Material:|Used - /);
+  });
+
+  it("handles a missing size tag, no flaws, no measurements and no SKU", () => {
+    expect(buildDescription(draft({ size: "Not visible", flaws: ["  "], measurements: {}, sku: "" }))).toBe(
+      "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining\nsize not tagged — check measurements for accuracy\n\n#carhartt #workwear #vintagejacket",
+    );
+  });
+
+  it("doesn't double up 'size' or '(pictured)'", () => {
+    const d = buildDescription(draft({ size: "size M", flaws: ["stain on front (pictured)"] }));
+    expect(d).toContain("size M\nstain on front (pictured)\n");
   });
 
   it("caps hashtags at 5", () => {
@@ -78,5 +86,24 @@ describe("shipping weight", () => {
     expect(shippedWeightOz(20)).toBe(23);
     expect(formatWeight(12)).toBe("12 oz");
     expect(formatWeight(23)).toBe("1 lb 7 oz");
+  });
+});
+
+describe("enrichHeadline", () => {
+  it("adds style words after the colour, like her listings", () => {
+    expect(enrichHeadline("Old Navy gray waffle knit thermal long sleeve casual shirt", ["Casual", "Indie", "thermal", "skate", "winter"]))
+      .toBe("Old Navy gray indie skater waffle knit thermal long sleeve casual shirt");
+  });
+  it("leaves a line that already has a colour and enough style words alone", () => {
+    const h = "Eddie Bauer gray skater surfer indie waffle knit thermal long sleeve shirt";
+    expect(enrichHeadline(h, ["grunge", "y2k"], "Grey")).toBe(h);
+  });
+  it("adds a missing colour and style words before the garment, not inside a name", () => {
+    expect(enrichHeadline("Arizona Desert Classic 1998 graphic tee", ["Casual", "Vintage", "streetwear"], "Navy"))
+      .toBe("Arizona Desert Classic 1998 navy casual vintage streetwear graphic tee");
+    expect(enrichHeadline("Carhartt carpenter jeans", ["workwear", "denim", "Vintage"], "")).toBe("Carhartt workwear vintage carpenter jeans");
+  });
+  it("ignores tags that aren't style words", () => {
+    expect(enrichHeadline("Plain white tee", ["tee", "cotton"], "White")).toBe("Plain white tee");
   });
 });

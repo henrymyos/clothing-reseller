@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schema";
 import { getDepopComps } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
-import { MAX_HASHTAGS, cleanHashtag } from "@/lib/depop";
+import { MAX_HASHTAGS, cleanHashtag, enrichHeadline } from "@/lib/depop";
 import { cleanSales, matchMySales } from "@/lib/sales";
 import { explainPrice, finalPrice, priceAnchor, type PriceBasis } from "@/lib/pricing";
 
@@ -18,7 +18,12 @@ Read the tags carefully: the brand tag, the size tag and the care/content tag ar
 Look at every photo for wear: stains, holes, pilling, fading, cracked prints, stretched collars, missing buttons. List each one with its location, and set the condition conservatively.
 
 Pricing: estimate what this sells for on Depop in the US — realistic sold prices, not retail and not hopeful asking prices. Blank-brand garments (Gildan, Hanes, etc.) are priced on the graphic, not the brand.
-The description is for Depop: casual, specific, no keyword stuffing, no hashtags in the body.`;
+Descriptions follow the seller's own style — a keyword-rich first line, then the size, then any flaws — with 5 one-word hashtags. Real examples from her shop:
+- "Croft & Barrow mocha brown cable knit quarter zip sweater" · #cable #grandma #preppy #cottage #cottagecore
+- "Van Heusen gray skater casual boxy fit quarter zip with black horizontal stripes" · #casual #boxy #indie #stripe #skate
+- "Volcom vintage 2007 dark gray y2k skater concert graphic polo shirt" · #y2k #vintage #skater #grunge #surf
+- "Amazon Essentials black waffle knit thermal long sleeve shirt" · #indie #grunge #skate #waffle #winter
+Write first lines like these, but work in more of the words a buyer would actually search for this exact piece — always at least two style words (indie, skater, surfer, grunge, y2k, vintage, preppy, cottagecore, granola, workwear, casual…) plus fit, era, fabric or item synonyms — while keeping it readable. If the seller's notes describe the item, use them as facts but still write a fuller, keyword-rich first line.`;
 
 export async function POST(req: NextRequest) {
   try {
@@ -58,6 +63,7 @@ export async function POST(req: NextRequest) {
       })
     );
     analysis.hashtags = [...new Set(analysis.hashtags.map(cleanHashtag).filter(Boolean))].slice(0, MAX_HASHTAGS);
+    analysis.headline = enrichHeadline(analysis.headline, [...analysis.styles, ...analysis.hashtags, analysis.age === "Modern" ? "" : "vintage"], analysis.colors[0]);
     // A size "from the tag" must come with the text actually read off it — a wrong
     // size on a listing means a return, so an unquoted guess becomes "Not visible".
     if (analysis.sizeSource === "tag" && !analysis.sizeTagText.trim()) {

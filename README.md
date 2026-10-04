@@ -36,9 +36,11 @@ npm test                     # unit tests (vitest)
 5. **Price**: one more call prices the item off her sales and the matched listings. These are live asking
    prices (Depop doesn't expose sold prices publicly), so the suggestion is anchored on her own
    matched sales when she has 2+, otherwise capped just above the closest Depop matches' median.
-6. **Listing** (`src/lib/depop.ts`): everything is editable; the Depop description (headline,
-   pitch, size, measurements, condition + flaws, material, ≤5 hashtags) is rebuilt live and
-   copied in one tap. Shipping weight and fee/profit math use editable Depop US defaults
+6. **Listing** (`src/lib/depop.ts`): everything is editable; the Depop description is written in
+   her own format — a keyword-rich first line (colour + style words buyers search + item, topped
+   up by `enrichHeadline`), `size …`, any flaws "(pictured)", optional measurements, her SKU and 5
+   one-word hashtags — rebuilt live and copied in one tap. Brand, condition and material go in
+   Depop's own fields, not the description. Shipping weight and fee/profit math use editable Depop US defaults
    (processing 3.3% + $0.45 on item + shipping + tax, 12% boost fee — checked against real payouts).
    "Copy row" puts the new item on the clipboard in her inventory sheet's column order.
 

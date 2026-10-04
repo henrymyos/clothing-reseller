@@ -95,38 +95,39 @@ export function formatInches(v: string): string {
 
 export type ListingDraft = {
   headline: string;
-  body: string;
-  brand: string;
   size: string;
-  condition: Condition;
-  material: string;
   flaws: string[];
   measurementKind: MeasurementKind;
   measurements: Record<string, string>;
   hashtags: string[];
+  sku?: string;
 };
 
-// The full Depop description: headline, pitch, then the facts buyers ask about
-// (size, measurements, condition + flaws, material) and hashtags last.
+// The Depop description, laid out the way @soldbychica writes hers:
+//   Eddie Bauer gray skater surfer indie waffle knit thermal long sleeve shirt
+//   size L
+//   small stain on front (pictured)
+//
+//   0190
+//   #indie #skate #surf #thermal #winter
+// The keyword-rich first line does the search work; no pitch, and no brand,
+// condition or material lines (those go in Depop's own fields).
 export function buildDescription(d: ListingDraft): string {
-  const lines: string[] = [];
-  if (d.headline.trim()) lines.push(d.headline.trim());
-  if (d.body.trim()) lines.push(d.body.trim());
-  const facts: string[] = [];
-  if (d.brand.trim() && !/^(unknown|unbranded)$/i.test(d.brand.trim())) facts.push(`Brand: ${d.brand.trim()}`);
-  if (d.size.trim() && !/not visible/i.test(d.size)) facts.push(`Size: ${d.size.trim()}`);
+  const top: string[] = [];
+  if (d.headline.trim()) top.push(d.headline.trim());
+  const size = d.size.trim();
+  top.push(size && !/not visible|unknown/i.test(size) ? `size ${size.replace(/^size\s+/i, "")}` : "size not tagged — check measurements for accuracy");
+  for (const f of d.flaws.map((x) => x.trim()).filter(Boolean)) top.push(/pictured/i.test(f) ? f : `${f} (pictured)`);
   const fields = MEASUREMENT_FIELDS[d.measurementKind] ?? [];
   const meas = fields
-    .map((f) => (d.measurements[f.key]?.trim() ? `${f.label} ${formatInches(d.measurements[f.key])}` : ""))
+    .map((f) => (d.measurements[f.key]?.trim() ? `${f.label.toLowerCase()} ${formatInches(d.measurements[f.key])}` : ""))
     .filter(Boolean);
-  if (meas.length) facts.push(`Measurements (laid flat): ${meas.join(" · ")}`);
-  const flaws = d.flaws.map((f) => f.trim()).filter(Boolean);
-  facts.push(`Condition: ${d.condition}${flaws.length ? ` — ${flaws.join("; ")} (pictured)` : ""}`);
-  if (d.material.trim() && !/^unknown$/i.test(d.material.trim())) facts.push(`Material: ${d.material.trim()}`);
-  lines.push(facts.join("\n"));
+  if (meas.length) top.push(`measurements laid flat: ${meas.join(", ")}`);
+  const bottom: string[] = [];
+  if (d.sku?.trim()) bottom.push(d.sku.trim());
   const tags = d.hashtags.map(cleanHashtag).filter(Boolean).slice(0, MAX_HASHTAGS);
-  if (tags.length) lines.push(tags.map((t) => `#${t}`).join(" "));
-  return lines.join("\n\n");
+  if (tags.length) bottom.push(tags.map((t) => `#${t}`).join(" "));
+  return [top.join("\n"), bottom.join("\n")].filter(Boolean).join("\n\n");
 }
 
 export type ProfitInput = {
@@ -157,4 +158,46 @@ export function shippedWeightOz(itemOz: number): number {
 }
 export function formatWeight(oz: number): string {
   return oz < 16 ? `${oz} oz` : `${Math.floor(oz / 16)} lb ${oz % 16} oz`;
+}
+
+// Style words buyers search on Depop (and the words her hashtags shorten them to).
+const STYLE_WORDS: Record<string, string> = {
+  indie: "indie", skater: "skater", skate: "skater", surfer: "surfer", surf: "surfer", grunge: "grunge",
+  y2k: "y2k", vintage: "vintage", preppy: "preppy", oldmoney: "old money", cottagecore: "cottagecore",
+  cottage: "cottagecore", granola: "granola", gorpcore: "gorpcore", workwear: "workwear", streetwear: "streetwear",
+  casual: "casual", boho: "boho", western: "western", coastal: "coastal", retro: "retro", minimalist: "minimalist",
+  sportswear: "sporty", sporty: "sporty", utility: "utility", punk: "punk", emo: "emo", goth: "goth",
+  coquette: "coquette", techwear: "techwear", loungewear: "loungewear", outdoors: "outdoors", beach: "beach",
+};
+const COLOR_WORDS = /^(black|gr[ae]y|white|cream|tan|brown|khaki|green|olive|blue|navy|purple|pink|red|maroon|burgundy|orange|yellow|silver|gold|teal|beige|mocha|charcoal|heather|light|dark)$/i;
+const MIN_STYLE_WORDS = 3;
+
+const GARMENT_WORDS = /^(carpenter|bootcut|straight|wide|baggy|boxy|relaxed|cropped|oversized|v-neck|mock|turtleneck|puffer|bomber|board|basketball|athletic|striped|plaid|knit|graphic|waffle|thermal|henley|long|short|quarter|zip|crewneck|crew|sweatshirt|hoodie|sweater|cardigan|tee|t-shirt|shirt|polo|jersey|tank|top|blouse|jeans|denim|pants|trousers|joggers|cargo|cargos|shorts|skirt|dress|jacket|coat|fleece|vest|windbreaker|track|button|flannel|corduroy|cable)$/i;
+
+// Make sure the first line reads like hers and carries enough search words: a
+// colour, then style words, then the item. Missing pieces come from the item's
+// own colour, style tags and hashtags. "Old Navy waffle knit thermal" →
+// "Old Navy gray indie skater waffle knit thermal".
+export function enrichHeadline(headline: string, candidates: string[], color = ""): string {
+  const words = headline.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return headline;
+  const key = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const has = new Set(words.map((w) => STYLE_WORDS[key(w)]).filter(Boolean));
+  const add: string[] = [];
+  for (const c of candidates) {
+    if (has.size + add.length >= MIN_STYLE_WORDS) break;
+    const s = STYLE_WORDS[key(c)];
+    if (s && !has.has(s) && !add.includes(s)) add.push(s);
+  }
+  // Where her lines put these: after the colour; with no colour, before the garment words.
+  let at = -1;
+  for (let i = 0; i < Math.min(words.length, 7); i++) if (COLOR_WORDS.test(words[i].replace(/[^a-z]/gi, ""))) at = i + 1;
+  const needColor = at < 0 && color.trim() && !/^multi$/i.test(color.trim());
+  if (at < 0) {
+    const g = words.findIndex((w, i) => i > 0 && GARMENT_WORDS.test(w.replace(/[^a-z-]/gi, "")));
+    at = g > 0 ? g : words.length;
+  }
+  const insert = [...(needColor ? [color.trim().toLowerCase()] : []), ...add];
+  if (!insert.length) return words.join(" ");
+  return [...words.slice(0, at), ...insert, ...words.slice(at)].join(" ");
 }

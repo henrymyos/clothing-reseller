@@ -21,15 +21,15 @@ const PHOTO_HINTS = ["Front", "Back", "Brand / size tag", "Care tag", "Flaw clos
 // Everything the seller can edit after the analysis. The Depop description is
 // rebuilt from these on every change, so the copied text always matches.
 type Draft = {
-  headline: string; body: string; brand: string; size: string; condition: Condition; material: string;
+  headline: string; sku: string; brand: string; size: string; condition: Condition; material: string;
   flaws: string[]; measurementKind: MeasurementKind; measurements: Record<string, string>; hashtags: string[];
   department: string; category: string; subcategory: string; colors: string[]; styles: string[];
   age: string; source: string; price: string; weightOz: string;
 };
 
-function draftFrom(r: AnalyzeResponse): Draft {
+function draftFrom(r: AnalyzeResponse, sku: string): Draft {
   return {
-    headline: r.headline, body: r.body, brand: r.brand, size: r.size, condition: r.condition, material: r.material,
+    headline: r.headline, sku, brand: r.brand, size: r.size, condition: r.condition, material: r.material,
     flaws: r.visibleFlaws, measurementKind: r.measurementKind, measurements: {}, hashtags: r.hashtags,
     department: r.department, category: r.category, subcategory: r.subcategory, colors: r.colors, styles: r.styles,
     age: r.age, source: r.source, price: String(r.suggestedPrice), weightOz: String(Math.round(r.estimatedWeightOz)),
@@ -83,7 +83,7 @@ export default function Home() {
       }
       if (!res.ok) throw new Error(data.error || "Analysis failed");
       setResult(data);
-      setDraft(draftFrom(data));
+      setDraft(draftFrom(data, nextSku(inventory)));
       setRunId((n) => n + 1);
       setStatus("done");
     } catch (e) {
@@ -171,13 +171,13 @@ export default function Home() {
 
         {error && <div className="mt-4 rounded-xl border border-cherry/30 bg-blush p-4 text-sm text-cherry-dark">{error}</div>}
 
-        {result && draft && status === "done" && <Results key={runId} result={result} draft={draft} setDraft={setDraft} sku={nextSku(inventory)} />}
+        {result && draft && status === "done" && <Results key={runId} result={result} draft={draft} setDraft={setDraft} />}
       </div>
     </main>
   );
 }
 
-function Results({ result, draft, setDraft, sku }: { result: AnalyzeResponse; draft: Draft; setDraft: (d: Draft) => void; sku: string }) {
+function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: Draft; setDraft: (d: Draft) => void }) {
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft({ ...draft, [k]: v });
   const description = useMemo(() => buildDescription(draft), [draft]);
   const [cost, setCost] = useState("");
@@ -238,10 +238,11 @@ function Results({ result, draft, setDraft, sku }: { result: AnalyzeResponse; dr
           <CopyButton text={description} label="Copy description" primary />
         </div>
         <Field label="First line (shows as the title)">
-          <input value={draft.headline} onChange={(e) => set("headline", e.target.value)} className={input} />
+          <textarea value={draft.headline} onChange={(e) => set("headline", e.target.value.replace(/\n/g, " "))} rows={2} className={`${input} resize-none`} />
         </Field>
-        <Field label="Pitch">
-          <textarea value={draft.body} onChange={(e) => set("body", e.target.value)} rows={3} className={`${input} resize-y`} />
+        <p className="mt-1 text-xs text-muted">Written like your listings, with extra words buyers search for. Brand, condition and material go in Depop&apos;s own fields below.</p>
+        <Field label="SKU">
+          <input value={draft.sku} onChange={(e) => set("sku", e.target.value)} placeholder="e.g. 0190" className={input} />
         </Field>
         <Field label={`Hashtags (up to ${MAX_HASHTAGS}, comma-separated)`}>
           <input
@@ -253,7 +254,7 @@ function Results({ result, draft, setDraft, sku }: { result: AnalyzeResponse; dr
         <p className="mt-3 text-xs font-medium text-muted">Preview</p>
         <pre className="mt-1 whitespace-pre-wrap rounded-xl bg-cream p-3 font-sans text-sm text-ink-soft">{description}</pre>
         <p className={`mt-1 text-right text-xs ${description.length > MAX_DESCRIPTION ? "text-cherry" : "text-muted"}`}>
-          {description.length}/{MAX_DESCRIPTION}{description.length > MAX_DESCRIPTION ? " — too long for Depop, trim the pitch" : ""}
+          {description.length}/{MAX_DESCRIPTION}{description.length > MAX_DESCRIPTION ? " — too long for Depop, shorten the first line" : ""}
         </p>
       </Card>
 
@@ -371,10 +372,10 @@ function Results({ result, draft, setDraft, sku }: { result: AnalyzeResponse; dr
         </details>
         <div className="mt-4 rounded-xl border border-line p-3 text-sm">
           <p className="font-medium">Add to your inventory sheet</p>
-          <p className="mt-0.5 text-xs text-muted">Copies a row{sku ? ` (SKU ${sku})` : ""} — click the first empty cell in the SOLD? column of your sheet and paste.</p>
+          <p className="mt-0.5 text-xs text-muted">Copies a row{draft.sku ? ` (SKU ${draft.sku})` : ""} — click the first empty cell in the SOLD? column of your sheet and paste.</p>
           <div className="mt-2 flex gap-2">
             <input value={sheetName} onChange={(e) => setSheetName(e.target.value)} className={input} aria-label="Name for your sheet" />
-            <CopyButton primary label="Copy row" text={sheetRow({ sku, name: sheetName, cost, listPrice: draft.price, date: new Date() })} />
+            <CopyButton primary label="Copy row" text={sheetRow({ sku: draft.sku, name: sheetName, cost, listPrice: draft.price, date: new Date() })} />
           </div>
         </div>
       </Card>

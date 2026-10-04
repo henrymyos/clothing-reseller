@@ -7,12 +7,7 @@ export const analysisSchema = z.object({
   headline: z
     .string()
     .describe(
-      "First line of the Depop description — it shows as the listing's title in the feed. Brand + era/style + item + color + size when known, under ~70 chars, e.g. 'Vintage 90s Carhartt Detroit Jacket Brown Duck Canvas XL'."
-    ),
-  body: z
-    .string()
-    .describe(
-      "Two or three short sentences selling the item: style, fit, standout details. No hashtags, no size/measurement/condition lines (those are added separately)."
+      "First line of the description, in the seller's style and packed with words buyers type into Depop search: brand (skip if unbranded/blank) + colour + AT LEAST 2 (up to 4) style words buyers search that fit the piece (indie, skater, surfer, grunge, y2k, vintage, 90s, preppy, old money, cottagecore, granola, gorpcore, workwear, streetwear, casual, boxy fit, baggy…) + the item type with its common search synonyms (e.g. 'waffle knit thermal long sleeve shirt', 'crewneck sweatshirt', 'quarter zip sweater', 'carpenter jeans') + one standout detail (graphic, pattern, pockets, era). Lowercase except the brand and proper nouns; no size, condition, emojis or hashtags; 10–18 words. Never just copy the seller's notes — expand them with search words. E.g. 'Eddie Bauer gray skater surfer indie waffle knit thermal long sleeve shirt'."
     ),
   itemType: z.string().describe("Garment type, e.g. 'Hoodie', 'Denim jacket', 'Midi dress'."),
   brand: z.string().describe("Brand read from logos/tags or the seller's notes; 'Unbranded' if none, 'Unknown' if unreadable."),
@@ -43,7 +38,10 @@ export const analysisSchema = z.object({
   age: z.enum(AGES).describe("Depop age: 'Modern' unless the tag/construction clearly dates it."),
   source: z.enum(SOURCES).describe("Depop source — usually 'Preloved', or 'Vintage' for 20+ year old pieces, 'Deadstock' for unworn old stock."),
   material: z.string().describe("Fabric content from the care tag if visible (e.g. '80% cotton, 20% polyester'), else a best guess prefixed with 'Likely', or 'Unknown'."),
-  hashtags: z.array(z.string()).max(5).describe("Up to 5 Depop hashtags buyers search, no '#', lowercase, e.g. 'vintagecarhartt', 'workwear'."),
+  hashtags: z
+    .array(z.string())
+    .max(5)
+    .describe("Exactly 5 hashtags in the seller's style: single lowercase words buyers search, no '#', mixing style, item and season and not repeating the brand — e.g. 'indie', 'skate', 'surf', 'thermal', 'winter' or 'y2k', 'vintage', 'grunge', 'cottagecore', 'preppy'."),
   measurementKind: z.enum(MEASUREMENT_KINDS).describe("Which measurements apply: top, bottoms, shorts, dress, skirt, shoes, accessory."),
   estimatedWeightOz: z.number().describe("Item weight in ounces (without packaging), e.g. tee ~6, hoodie ~20, jeans ~22, heavy jacket ~45."),
   searchQuery: z
