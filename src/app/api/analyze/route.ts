@@ -95,9 +95,11 @@ ${comps.listings.map((l) => `- [${l.similarity}] ${l.brand} "${l.title}" size ${
             model,
             abortSignal,
             maxRetries: 0,
+            temperature: 0, // the same item should get the same price run to run
             schema: pricingSchema,
-            system:
-              "You price secondhand clothing for one Depop seller. Her own past sold prices are real outcomes for her shop and audience — trust them most. Other Depop listings are asking prices that run above sold prices, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more. Write the reasoning to the seller directly, in one sentence using 'you'/'your' (e.g. 'Your 2 similar Gildan hoodies sold for $13–15, and matching Depop listings ask about $10.').",
+            system: hasMine
+              ? "You price secondhand clothing for one Depop seller. Her own past sold prices are real outcomes for her shop and audience — trust them most. Other Depop listings are asking prices that run above sold prices, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more. Write the reasoning to her directly in one sentence using 'you'/'your', citing only the sales and listings given. Explain the evidence only — don't restate your suggested price or range (the app shows those)."
+              : "You price secondhand clothing for a Depop seller. You're given Depop listings already checked to be close matches; they are asking prices that run above what items sell for, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more. Write the reasoning in one sentence citing the matched listings; explain the evidence only — don't restate your suggested price or range (the app shows those). The seller has no sales history for this item: never say or imply that she has sold anything.",
             prompt: `Item: ${analysis.headline} — ${analysis.brand} ${analysis.itemType}, condition ${analysis.condition}, size ${analysis.size}${
               analysis.visibleFlaws.length ? `, flaws: ${analysis.visibleFlaws.join("; ")}` : ""
             }.
@@ -116,13 +118,19 @@ Return the final range and suggested price in USD, citing her sales when they ex
           : comps ? (close.length >= 3 ? quantile(close, 0.5) : comps.median)
           : mySales?.familyMedian ?? null;
         const cap = anchor != null ? Math.round(anchor * (myPrices.length >= 2 ? 1.2 : 1.1)) : Infinity;
-        const suggested = Math.max(1, Math.min(Math.round(pricing.suggestedPrice), cap));
+        // A floor too, so run-to-run wobble in reading the photos can't undersell
+        // her — only a Fair-condition item may go well under the evidence.
+        const floor = anchor != null && analysis.condition !== "Used - Fair" ? Math.round(anchor * 0.7) : 1;
+        const suggested = Math.max(floor, 1, Math.min(Math.round(pricing.suggestedPrice), cap));
         // The range is the middle half of her matched sales (or the Depop matches), always containing the suggestion.
         const band = myPrices.length >= 2 ? myPrices : comps ? comps.listings.map((l) => l.price).sort((x, y) => x - y) : [];
         analysis.suggestedPrice = suggested;
         analysis.priceLow = band.length ? Math.min(Math.round(quantile(band, 0.25)), suggested) : Math.min(Math.round(pricing.priceLow), suggested);
         analysis.priceHigh = band.length ? Math.max(Math.round(quantile(band, 0.75)), suggested) : Math.max(Math.round(pricing.priceHigh), suggested);
-        analysis.priceReasoning = pricing.priceReasoning;
+        // Never claim sales she didn't make (a model can echo the 'your sales' framing).
+        analysis.priceReasoning = !hasMine && /\b(you('ve| have)? sold|your [^.]{0,40}\bsold\b|sold for)\b/i.test(pricing.priceReasoning) && comps
+          ? `${comps.sampleSize} matching Depop listings ask $${comps.low}–$${comps.high} (median $${comps.median}); priced a little under to sell within a few weeks.`
+          : pricing.priceReasoning;
       } catch (e) {
         console.error("Re-pricing failed, keeping the photo estimate:", e);
       }
