@@ -78,6 +78,8 @@ export function parseDepopResult(r: { url: string; title: string; text: string }
 // structured line (checked first) beats words in the title.
 const FAMILIES: [string, RegExp][] = [
   ["hoodie", /\b(hoodies?|hoody|sweatshirts?|crew ?necks?|pullover hood)/],
+  // Waffle-knit thermals and henleys are long-sleeve tees on Depop, not knitwear.
+  ["tee", /\b(thermals?|henleys?|waffle)\b/],
   ["knit", /\b(jumpers?|sweaters?|cardigans?|knit)/],
   ["tee", /\b(t-?shirts?|tees?)\b/],
   ["shirt", /\b(shirts?|blouses?|button[- ]?(up|down))\b/],

@@ -34,6 +34,12 @@ describe("garment families", () => {
     expect(garmentFamily("Puffer gilet")).toBe("jacket");
     expect(garmentFamily("Midi dress")).toBe("dress");
   });
+  it("treats waffle-knit thermals and henleys as long-sleeve tees, not sweaters", () => {
+    expect(garmentFamily("Eddie Bauer gray henley waffle knit thermal long sleeve")).toBe("tee");
+    expect(garmentFamily("Henley long sleeve shirt")).toBe("tee");
+    expect(garmentFamily("Chunky cable knit sweater")).toBe("knit");
+    expect(garmentFamily("Thermal lined hoodie")).toBe("hoodie");
+  });
 });
 
 describe("brand matching", () => {
