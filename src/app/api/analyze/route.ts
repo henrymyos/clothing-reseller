@@ -5,6 +5,7 @@ import { getDepopComps, quantile } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
 import { MAX_HASHTAGS, cleanHashtag } from "@/lib/depop";
 import { cleanSales, matchMySales } from "@/lib/sales";
+import { explainPrice } from "@/lib/pricing";
 
 export const maxDuration = 60;
 
@@ -98,8 +99,8 @@ ${comps.listings.map((l) => `- [${l.similarity}] ${l.brand} "${l.title}" size ${
             temperature: 0, // the same item should get the same price run to run
             schema: pricingSchema,
             system: hasMine
-              ? "You price secondhand clothing for one Depop seller. Her own past sold prices are real outcomes for her shop and audience — trust them most. Other Depop listings are asking prices that run above sold prices, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more. Write the reasoning to her directly in one sentence using 'you'/'your', citing only the sales and listings given. Explain the evidence only — don't restate your suggested price or range (the app shows those)."
-              : "You price secondhand clothing for a Depop seller. You're given Depop listings already checked to be close matches; they are asking prices that run above what items sell for, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more. Write the reasoning in one sentence citing the matched listings; explain the evidence only — don't restate your suggested price or range (the app shows those). The seller has no sales history for this item: never say or imply that she has sold anything.",
+              ? "You price secondhand clothing for one Depop seller. Her own past sold prices are real outcomes for her shop and audience — trust them most. Other Depop listings are asking prices that run above sold prices, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more."
+              : "You price secondhand clothing for a Depop seller. You're given Depop listings already checked to be close matches; they are asking prices that run above what items sell for, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more.",
             prompt: `Item: ${analysis.headline} — ${analysis.brand} ${analysis.itemType}, condition ${analysis.condition}, size ${analysis.size}${
               analysis.visibleFlaws.length ? `, flaws: ${analysis.visibleFlaws.join("; ")}` : ""
             }.
@@ -127,10 +128,10 @@ Return the final range and suggested price in USD, citing her sales when they ex
         analysis.suggestedPrice = suggested;
         analysis.priceLow = band.length ? Math.min(Math.round(quantile(band, 0.25)), suggested) : Math.min(Math.round(pricing.priceLow), suggested);
         analysis.priceHigh = band.length ? Math.max(Math.round(quantile(band, 0.75)), suggested) : Math.max(Math.round(pricing.priceHigh), suggested);
-        // Never claim sales she didn't make (a model can echo the 'your sales' framing).
-        analysis.priceReasoning = !hasMine && /\b(you('ve| have)? sold|your [^.]{0,40}\bsold\b|sold for)\b/i.test(pricing.priceReasoning) && comps
-          ? `${comps.sampleSize} matching Depop listings ask $${comps.low}–$${comps.high} (median $${comps.median}); priced a little under to sell within a few weeks.`
-          : pricing.priceReasoning;
+        // The explanation is written here from the real evidence, not by the model —
+        // it can't invent sales she didn't make or quote numbers that disagree with
+        // the final price and range shown.
+        analysis.priceReasoning = explainPrice(mySales, comps, analysis.visibleFlaws, analysis.condition);
       } catch (e) {
         console.error("Re-pricing failed, keeping the photo estimate:", e);
       }
