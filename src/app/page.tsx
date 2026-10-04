@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { AnalyzeResponse, Comps } from "@/lib/schema";
-import { importSalesCsv, type MySales, type Sale } from "@/lib/sales";
+import type { MySales } from "@/lib/sales";
 import {
   AGES, COLORS, CONDITIONS, DEFAULT_FEES, DEPARTMENTS, MAX_COLORS, MAX_DESCRIPTION, MAX_HASHTAGS,
   MAX_STYLES, MEASUREMENT_FIELDS, MEASUREMENT_KINDS, SOURCES, STYLES,
@@ -13,21 +13,11 @@ import {
 import { Card, Label, input } from "@/components/ui";
 import { inventoryToSales, nextSku, sheetRow, type InvItem } from "@/lib/inventory";
 import { readInventory } from "@/lib/inventoryStore";
+import { readSales, type SalesStore } from "@/lib/salesStore";
 
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
 const PHOTO_HINTS = ["Front", "Back", "Brand / size tag", "Care tag", "Flaw close-up", "Detail"];
-const SHOP = "soldbychica";
-const SALES_KEY = "snaplist.sales.v1";
-
-type SalesStore = { sales: Sale[]; fileName: string; importedAt: number };
-function readSales(): SalesStore | null {
-  try {
-    const v = JSON.parse(localStorage.getItem(SALES_KEY) || "null");
-    return v && Array.isArray(v.sales) ? v : null;
-  } catch { return null; }
-}
-
 // Everything the seller can edit after the analysis. The Depop description is
 // rebuilt from these on every change, so the copied text always matches.
 type Draft = {
@@ -58,16 +48,11 @@ export default function Home() {
   const [inventory, setInventory] = useState<InvItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Her sales history and inventory sheet live only in this browser (see SalesCard and /inventory).
+  // Her Depop sales and inventory sheet live only in this browser; they're loaded on My shop.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSales(readSales()); setInventory(readInventory()?.items ?? []); }, []);
   // Without a Depop sales export, the sold items in her inventory sheet price new listings.
   const pricingSales = sales?.sales ?? (inventory.length ? inventoryToSales(inventory) : undefined);
-  function saveSales(v: SalesStore | null) {
-    setSales(v);
-    try { if (v) localStorage.setItem(SALES_KEY, JSON.stringify(v)); else localStorage.removeItem(SALES_KEY); } catch { /* storage full or blocked */ }
-  }
-
   async function addFiles(files: FileList) {
     const room = MAX_PHOTOS - photos.length;
     const picked = Array.from(files).slice(0, Math.max(0, room));
@@ -113,20 +98,14 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-cream text-ink">
-      <div className="mx-auto max-w-2xl px-4 py-10">
-        <header className="mb-7 text-center">
-          <a href={`https://www.depop.com/${SHOP}/`} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-full border border-cherry/25 bg-blush px-3 py-1 text-xs font-semibold text-cherry hover:border-cherry/50">
-            <span className="h-1.5 w-1.5 rounded-full bg-cherry" /> for @{SHOP}
-          </a>
-          <h1 className="mt-3 font-display text-5xl font-semibold tracking-tight">
-            Snap<span className="text-cherry">List</span>
-          </h1>
-          <p className="mx-auto mt-2 max-w-md text-ink-soft">Snap your item — get a ready-to-post Depop listing, priced on your own sales and matching Depop listings.</p>
-          <Link href="/inventory" className="mt-3 inline-block text-sm font-semibold text-cherry hover:underline">Shop &amp; profit →</Link>
+      <div className="mx-auto max-w-2xl px-4 py-6">
+        <header className="mb-5">
+          <h1 className="font-display text-3xl font-semibold tracking-tight">List an item</h1>
+          <p className="mt-1 text-sm text-ink-soft">Add photos — get the title, description, every Depop field and a price based on your own sales.</p>
+          <p className="mt-1 text-xs text-muted">
+            {pricingSales ? `Pricing from ${pricingSales.length} of your past sales.` : <>Load your sheet on <Link href="/shop" className="font-semibold text-cherry hover:underline">My shop</Link> so prices use your own sales.</>}
+          </p>
         </header>
-
-        <SalesCard store={sales} onChange={saveSales} fallback={!sales && pricingSales ? pricingSales.length : 0} />
 
         {/* Photos + notes */}
         <Card>
@@ -398,51 +377,6 @@ function Results({ result, draft, setDraft, sku }: { result: AnalyzeResponse; dr
       <p className="text-center text-xs text-muted">
         Confidence: {result.confidence} · read from {result.photoCount} photo{result.photoCount === 1 ? "" : "s"} · prices are estimates.
       </p>
-    </div>
-  );
-}
-
-// Her sales history: import once from the CSV Depop lets sellers download; kept
-// only in this browser and sent along with each analysis for pricing.
-function SalesCard({ store, onChange, fallback }: { store: SalesStore | null; onChange: (v: SalesStore | null) => void; fallback: number }) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
-  const [open, setOpen] = useState(false);
-  async function onFile(f: File) {
-    const r = importSalesCsv(await f.text());
-    if ("error" in r) { setMsg({ text: r.error, bad: true }); return; }
-    onChange({ sales: r.sales, fileName: f.name, importedAt: Date.now() });
-    setMsg({ text: `Imported ${r.sales.length} sales${r.skipped ? ` (${r.skipped} rows without a price skipped)` : ""}.` });
-    setOpen(false);
-  }
-  const prices = store ? store.sales.map((x) => x.price).sort((a, b) => a - b) : [];
-  const med = prices.length ? prices[Math.floor(prices.length / 2)] : 0;
-  return (
-    <div className="mb-4 rounded-2xl border border-line bg-surface p-4 card-shadow">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-semibold">Your sales history</p>
-          <p className="truncate text-xs text-muted">
-            {store ? `${store.sales.length} sold items · typical $${med} · from ${store.fileName}` : fallback ? `Using the ${fallback} sold items in your inventory sheet. Import your Depop sales for sizes and full titles.` : "Import your Depop sales so prices are based on what you've actually sold."}
-          </p>
-        </div>
-        <div className="flex shrink-0 gap-2">
-          {store && <button type="button" onClick={() => { onChange(null); setMsg({ text: "Sales history removed from this device." }); }} className="rounded-lg px-2 py-1.5 text-xs text-muted hover:text-cherry">Remove</button>}
-          <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg border border-line-strong px-3 py-1.5 text-xs font-semibold hover:bg-blush">{store ? "Update" : "Import"}</button>
-        </div>
-      </div>
-      {open && (
-        <div className="mt-3 rounded-xl bg-cream p-3 text-xs text-ink-soft">
-          <ol className="list-decimal space-y-1 pl-4">
-            <li>On depop.com (logged in as @{SHOP}), open your selling / account area and download your <b>sales history</b> as a CSV file.</li>
-            <li>Choose that file below. Any spreadsheet with an item description and a price column works too.</li>
-          </ol>
-          <p className="mt-2 text-muted">Only the item, brand, category, size, price and date are kept — buyer names and addresses are dropped. It&apos;s stored on this device only.</p>
-          <button type="button" onClick={() => inputRef.current?.click()} className="mt-3 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark">Choose CSV file</button>
-        </div>
-      )}
-      {msg && <p className={`mt-2 text-xs ${msg.bad ? "text-cherry" : "text-sage"}`}>{msg.text}</p>}
-      <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
     </div>
   );
 }

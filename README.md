@@ -42,7 +42,7 @@ npm test                     # unit tests (vitest)
    (processing 3.3% + $0.45 on item + shipping + tax, 12% boost fee — checked against real payouts).
    "Copy row" puts the new item on the clipboard in her inventory sheet's column order.
 
-## Shop & profit (`/inventory`)
+## My shop (`/shop`)
 
 Paste her inventory sheet from Google Sheets, link it (if shared "anyone with the link"; read
 via `/api/sheet`, Google Sheets URLs only), or upload a CSV. Parsed and stored in the browser
@@ -51,6 +51,12 @@ days-to-sell per item, totals, fees (and how much boosting costs), monthly resul
 kind of item and by sourcing trip, best/worst items, markdown suggestions for stale stock
 (never below break-even), sheet problems (duplicate SKUs etc.), and a full CSV export. Sold items
 from the sheet also price new listings when no Depop sales export is loaded.
+
+The app has two tabs (`src/components/AppNav.tsx`): **List an item** (photos → listing + price)
+and **My shop** — recommendations for future buying and listing (`src/lib/recommend.ts`: what to
+buy more of and the most to pay, what to skip, sizes/brands that sell, pricing for offers,
+boosting, restock timing, markdowns), her past orders from the sheet and the Depop export, her
+stock, and the data imports. `/inventory` redirects to `/shop`.
 
 ## Models
 

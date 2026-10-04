@@ -175,7 +175,7 @@ export type ItemCalc = InvItem & {
 export type Settings = { fees: Fees; assumeBoosted: boolean; staleDays: number };
 export const DEFAULT_SETTINGS: Settings = { fees: DEFAULT_FEES, assumeBoosted: true, staleDays: 30 };
 
-const payoutAt = (price: number, boosted: boolean, fees: Fees) =>
+export const payoutAt = (price: number, boosted: boolean, fees: Fees) =>
   profit({ price, cost: 0, boosted, sellerPaysShipping: false, shippingCost: 0, fees }).payout;
 
 // Lowest whole-dollar-ish price (to the cent) whose payout covers the cost.

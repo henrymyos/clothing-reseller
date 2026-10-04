@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { analyzeInventory, importInventory, reportCsv, type ItemCalc, type Report } from "@/lib/inventory";
+import { importSalesCsv, type Sale } from "@/lib/sales";
+import { readSales, saveSales, type SalesStore } from "@/lib/salesStore";
+import { normSize, recommend, type Rec } from "@/lib/recommend";
 import { DEFAULT_FEES } from "@/lib/depop";
 import { readInventory, readShopSettings, saveInventory, saveShopSettings, type InventoryStore, type ShopSettings } from "@/lib/inventoryStore";
 import { Card, Label, input } from "@/components/ui";
@@ -15,39 +17,56 @@ const shortDate = (d: string) => (d ? new Date(`${d}T12:00:00`).toLocaleDateStri
 const inline = input.replace("w-full ", "w-auto ");
 const todayIso = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 
-export default function Inventory() {
+export default function Shop() {
   const [store, setStore] = useState<InventoryStore | null>(null);
   const [settings, setSettings] = useState<ShopSettings>({ assumeBoosted: true, staleDays: 30 });
+  const [sales, setSales] = useState<SalesStore | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setStore(readInventory()); setSettings(readShopSettings()); setLoaded(true); }, []);
+  useEffect(() => { setStore(readInventory()); setSales(readSales()); setSettings(readShopSettings()); setLoaded(true); }, []);
 
   function save(v: InventoryStore | null) { setStore(v); saveInventory(v); }
+  function saveOrders(v: SalesStore | null) { setSales(v); saveSales(v); }
   function updateSettings(v: ShopSettings) { setSettings(v); saveShopSettings(v); }
 
   const report = useMemo(
     () => (store ? analyzeInventory(store.items, todayIso(), { fees: DEFAULT_FEES, ...settings }) : null),
     [store, settings],
   );
+  const recs = useMemo(
+    () => (report ? recommend(report, sales?.sales ?? [], todayIso(), { fees: DEFAULT_FEES, ...settings }) : []),
+    [report, sales, settings],
+  );
 
   return (
     <main className="min-h-screen bg-cream text-ink">
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <header className="mb-6">
-          <Link href="/" className="text-sm font-medium text-ink-soft hover:text-cherry">← New listing</Link>
-          <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">Shop <span className="text-cherry">&amp;</span> profit</h1>
-          <p className="mt-1 text-ink-soft">Your inventory sheet, worked out: profit on every item, what sells, and what to do with what doesn&apos;t.</p>
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <header className="mb-5">
+          <h1 className="font-display text-3xl font-semibold tracking-tight">My shop</h1>
+          <p className="mt-1 text-sm text-ink-soft">Everything about your past orders, and what to do next.</p>
+          {(report || sales) && (
+            <div className="mt-3 flex flex-wrap gap-1.5 text-xs">
+              {[report && ["next", "What to do next"], report && ["orders", "Past orders"], sales && ["depop", "Depop orders"], report && ["stock", "Stock"], ["data", "Your data"]]
+                .filter((x): x is string[] => !!x)
+                .map(([id, label]) => <a key={id} href={`#${id}`} className="rounded-full border border-line-strong bg-surface px-2.5 py-1 font-medium text-ink-soft hover:border-cherry/50 hover:text-cherry">{label}</a>)}
+            </div>
+          )}
         </header>
 
-        <ImportCard store={store} onChange={save} />
-
-        {loaded && !store && (
-          <p className="mt-6 text-center text-sm text-muted">Import your sheet to see your numbers.</p>
+        {loaded && !store && !sales && (
+          <div className="mb-5 rounded-2xl border border-cherry/25 bg-blush p-5 text-sm text-ink-soft">
+            <p className="font-semibold text-ink">Start here</p>
+            <p className="mt-1">Load your inventory sheet (for profit and buying advice) and your Depop sales export (for sizes and brands). Both stay on this device.</p>
+          </div>
         )}
 
         {report && store && (
-          <div className="mt-5 space-y-5">
+          <div className="space-y-5">
+            <Section id="next" title="What to do next" sub="Recommendations for your next buying trips and listings, from your own numbers.">
+              <Recs recs={recs} />
+            </Section>
+            <Section id="orders" title="Past orders" sub={`${report.totals.sold} sold items from your inventory sheet.`}>
             <Summary r={report} />
             {report.issues.length > 0 && (
               <div className="rounded-2xl border border-honey/40 bg-honey-soft p-4 text-sm">
@@ -56,12 +75,28 @@ export default function Inventory() {
               </div>
             )}
             <FeesCard r={report} />
-            <StaleCard r={report} staleDays={settings.staleDays} />
             <Months r={report} />
             <Groups r={report} />
             <Hauls r={report} />
             <BestWorst r={report} />
+            </Section>
+          </div>
+        )}
+
+        {sales && (
+          <div className="mt-5">
+            <Section id="depop" title="Depop orders" sub={`${sales.sales.length} sales from your Depop export, with sizes and brands.`}>
+              <DepopOrders sales={sales.sales} />
+            </Section>
+          </div>
+        )}
+
+        {report && store && (
+          <div className="mt-5 space-y-5">
+            <Section id="stock" title="Stock" sub={`${report.totals.unsold} items not sold yet.`}>
+            <StaleCard r={report} staleDays={settings.staleDays} />
             <AllItems items={report.items} />
+            </Section>
             <Card>
               <Label>Settings</Label>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
@@ -83,8 +118,123 @@ export default function Inventory() {
             </Card>
           </div>
         )}
+
+        <div className="mt-5">
+          <Section id="data" title="Your data" sub="Stored on this device only. Update whenever your sheet or Depop sales change.">
+            <ImportCard store={store} onChange={save} />
+            <OrdersImport store={sales} onChange={saveOrders} />
+          </Section>
+        </div>
       </div>
     </main>
+  );
+}
+
+function Section({ id, title, sub, children }: { id: string; title: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-20 space-y-4">
+      <div className="pt-2">
+        <h2 className="font-display text-2xl font-semibold tracking-tight">{title}</h2>
+        {sub && <p className="text-sm text-muted">{sub}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const REC_ICON: Record<Rec["kind"], string> = { buy: "🛍️", skip: "✋", pay: "💵", size: "📏", brand: "🏷️", price: "🤝", boost: "🚀", stock: "📦", markdown: "✂️" };
+function Recs({ recs }: { recs: Rec[] }) {
+  if (!recs.length) return <Card><p className="text-sm text-muted">Not enough sales yet for recommendations.</p></Card>;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      {recs.map((r) => (
+        <div key={r.title} className={`rounded-2xl border p-4 card-shadow ${r.kind === "buy" ? "border-sage/30 bg-sage-soft" : r.kind === "skip" ? "border-honey/30 bg-honey-soft" : "border-line bg-surface"}`}>
+          <p className="font-semibold"><span aria-hidden className="mr-1.5">{REC_ICON[r.kind]}</span>{r.title}</p>
+          <p className="mt-1 text-sm text-ink-soft">{r.detail}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DepopOrders({ sales }: { sales: Sale[] }) {
+  const [limit, setLimit] = useState(15);
+  const sorted = useMemo(() => [...sales].sort((a, b) => b.date.localeCompare(a.date)), [sales]);
+  const prices = sales.map((x) => x.price).sort((a, b) => a - b);
+  const mid = prices[Math.floor(prices.length / 2)] ?? 0;
+  const total = prices.reduce((a, b) => a + b, 0);
+  const sizes = new Map<string, number>();
+  for (const x of sales) { const z = normSize(x.size); if (z) sizes.set(z, (sizes.get(z) ?? 0) + 1); }
+  const sizeList = [...sizes].sort((a, b) => b[1] - a[1]);
+  const brands = new Map<string, number[]>();
+  for (const x of sales) if (x.brand && !/^(other)$/i.test(x.brand)) brands.set(x.brand, [...(brands.get(x.brand) ?? []), x.price]);
+  const brandList = [...brands].sort((a, b) => b[1].length - a[1].length).slice(0, 10);
+  const range = sorted.length ? `${shortDate(sorted[sorted.length - 1].date)} – ${shortDate(sorted[0].date)}` : "";
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2">
+        <Tile label="Orders" value={`${sales.length}`} sub={range} />
+        <Tile label="Typical price" value={usd(mid, 0)} sub="median sale" />
+        <Tile label="Total sales" value={usd(total, 0)} sub="before fees" />
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Card>
+          <Label>Sizes sold</Label>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {sizeList.map(([k, n]) => <span key={k} className="rounded-full border border-line-strong bg-cream px-2.5 py-0.5 text-xs"><b>{k}</b> · {n}</span>)}
+          </div>
+        </Card>
+        <Card>
+          <Label>Top brands</Label>
+          <ul className="mt-2 space-y-1 text-sm">
+            {brandList.map(([b, p]) => <li key={b} className="flex justify-between gap-3"><span className="truncate">{b}</span><span className="shrink-0 text-muted">{p.length} sold · ~{usd([...p].sort((x, y) => x - y)[Math.floor(p.length / 2)], 0)}</span></li>)}
+          </ul>
+        </Card>
+      </div>
+      <Card>
+        <Label>Recent orders</Label>
+        <ul className="mt-2 divide-y divide-line">
+          {sorted.slice(0, limit).map((x, i) => (
+            <li key={i} className="flex items-center justify-between gap-3 py-1.5 text-sm">
+              <div className="min-w-0">
+                <p className="truncate">{x.title}</p>
+                <p className="text-xs text-muted">{[shortDate(x.date), x.brand, x.size && `size ${x.size}`].filter(Boolean).join(" · ")}</p>
+              </div>
+              <span className="shrink-0 font-semibold">{usd(x.price)}</span>
+            </li>
+          ))}
+        </ul>
+        {sorted.length > limit && <button onClick={() => setLimit((n) => n + 50)} className="mt-2 w-full rounded-lg border border-line py-2 text-sm font-medium text-ink-soft hover:bg-blush">Show more ({sorted.length - limit} left)</button>}
+      </Card>
+    </>
+  );
+}
+
+// Her Depop sales export (sizes, brands, full titles). Also prices new listings.
+function OrdersImport({ store, onChange }: { store: SalesStore | null; onChange: (v: SalesStore | null) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
+  async function onFile(f: File) {
+    const r = importSalesCsv(await f.text());
+    if ("error" in r) { setMsg({ text: r.error, bad: true }); return; }
+    onChange({ sales: r.sales, fileName: f.name, importedAt: Date.now() });
+    setMsg({ text: `Loaded ${r.sales.length} orders${r.skipped ? ` (${r.skipped} rows without a price skipped)` : ""}.` });
+  }
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-4 card-shadow">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Depop sales export</p>
+          <p className="truncate text-xs text-muted">{store ? `${store.sales.length} orders · ${store.fileName}` : "A CSV of your Depop sales — sizes, brands and full titles. Also used to price new listings."}</p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {store && <button type="button" onClick={() => { onChange(null); setMsg({ text: "Depop orders removed from this device." }); }} className="rounded-lg px-2 py-1.5 text-xs text-muted hover:text-cherry">Remove</button>}
+          <button type="button" onClick={() => ref.current?.click()} className="rounded-lg border border-line-strong px-3 py-1.5 text-xs font-semibold hover:bg-blush">{store ? "Update" : "Import"}</button>
+        </div>
+      </div>
+      {msg && <p className={`mt-2 text-xs ${msg.bad ? "text-cherry" : "text-sage"}`}>{msg.text}</p>}
+      <input ref={ref} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
+    </div>
   );
 }
 
