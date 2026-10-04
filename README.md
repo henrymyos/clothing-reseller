@@ -29,10 +29,14 @@ npm test                     # unit tests (vitest)
    Condition`) — no AI. Fixed rules decide what counts: same garment family; same brand for
    real brands; shared design (or same blank maker) for blanks; kids only vs kids; UK £
    listings skipped; price outliers trimmed.
-4. **Price**: one more call prices the item off the matched listings. These are live asking
-   prices (Depop doesn't expose sold prices), so the suggestion is capped just above the
-   closest matches' median and the range is the middle half of the matched prices.
-5. **Listing** (`src/lib/depop.ts`): everything is editable; the Depop description (headline,
+4. **Her sales** (`src/lib/sales.ts`): the seller imports her own Depop sales export (CSV) once;
+   it's parsed in the browser, only item/brand/category/size/price/date are kept (buyer details
+   are dropped), stored in localStorage, and sent with each analysis. Her sold items like this one
+   are matched with the same rules and are the strongest price signal.
+5. **Price**: one more call prices the item off her sales and the matched listings. These are live asking
+   prices (Depop doesn't expose sold prices publicly), so the suggestion is anchored on her own
+   matched sales when she has 2+, otherwise capped just above the closest Depop matches' median.
+6. **Listing** (`src/lib/depop.ts`): everything is editable; the Depop description (headline,
    pitch, size, measurements, condition + flaws, material, ≤5 hashtags) is rebuilt live and
    copied in one tap. Shipping weight and fee/profit math use editable Depop US defaults.
 

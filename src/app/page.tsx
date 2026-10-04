@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AnalyzeResponse, Comps } from "@/lib/schema";
+import { importSalesCsv, type MySales, type Sale } from "@/lib/sales";
 import {
   AGES, COLORS, CONDITIONS, DEFAULT_FEES, DEPARTMENTS, MAX_COLORS, MAX_DESCRIPTION, MAX_HASHTAGS,
   MAX_STYLES, MEASUREMENT_FIELDS, MEASUREMENT_KINDS, SOURCES, STYLES,
@@ -12,6 +13,16 @@ import {
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
 const PHOTO_HINTS = ["Front", "Back", "Brand / size tag", "Care tag", "Flaw close-up", "Detail"];
+const SHOP = "soldbychica";
+const SALES_KEY = "snaplist.sales.v1";
+
+type SalesStore = { sales: Sale[]; fileName: string; importedAt: number };
+function readSales(): SalesStore | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(SALES_KEY) || "null");
+    return v && Array.isArray(v.sales) ? v : null;
+  } catch { return null; }
+}
 
 // Everything the seller can edit after the analysis. The Depop description is
 // rebuilt from these on every change, so the copied text always matches.
@@ -39,7 +50,16 @@ export default function Home() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runId, setRunId] = useState(0); // remounts the results (and their profit inputs) per analysis
+  const [sales, setSales] = useState<SalesStore | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Her sales history lives only in this browser (see SalesCard).
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setSales(readSales()); }, []);
+  function saveSales(v: SalesStore | null) {
+    setSales(v);
+    try { if (v) localStorage.setItem(SALES_KEY, JSON.stringify(v)); else localStorage.removeItem(SALES_KEY); } catch { /* storage full or blocked */ }
+  }
 
   async function addFiles(files: FileList) {
     const room = MAX_PHOTOS - photos.length;
@@ -60,7 +80,7 @@ export default function Home() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: photos, description: notes.trim() || undefined }),
+        body: JSON.stringify({ images: photos, description: notes.trim() || undefined, sales: sales?.sales }),
       });
       const text = await res.text();
       let data: AnalyzeResponse & { error?: string };
@@ -85,25 +105,33 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900">
+    <main className="min-h-screen bg-cream text-ink">
       <div className="mx-auto max-w-2xl px-4 py-10">
-        <header className="mb-8 text-center">
-          <h1 className="text-3xl font-bold tracking-tight">SnapList</h1>
-          <p className="mt-1 text-neutral-500">Snap your item — get a ready-to-post Depop listing, priced on matching Depop listings.</p>
+        <header className="mb-7 text-center">
+          <a href={`https://www.depop.com/${SHOP}/`} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-full border border-cherry/25 bg-blush px-3 py-1 text-xs font-semibold text-cherry hover:border-cherry/50">
+            <span className="h-1.5 w-1.5 rounded-full bg-cherry" /> for @{SHOP}
+          </a>
+          <h1 className="mt-3 font-display text-5xl font-semibold tracking-tight">
+            Snap<span className="text-cherry">List</span>
+          </h1>
+          <p className="mx-auto mt-2 max-w-md text-ink-soft">Snap your item — get a ready-to-post Depop listing, priced on your own sales and matching Depop listings.</p>
         </header>
+
+        <SalesCard store={sales} onChange={saveSales} />
 
         {/* Photos + notes */}
         <Card>
           <div className="grid grid-cols-3 gap-2">
             {photos.map((src, i) => (
-              <div key={i} className="relative aspect-square overflow-hidden rounded-xl border border-neutral-200 bg-neutral-50">
+              <div key={i} className="relative aspect-square overflow-hidden rounded-xl border border-line bg-cream">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={src} alt={`photo ${i + 1}`} className="h-full w-full object-cover" />
-                {i === 0 && <span className="absolute left-1.5 top-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white">Cover</span>}
+                {i === 0 && <span className="absolute left-1.5 top-1.5 rounded-md bg-ink/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">Cover</span>}
                 <button
                   type="button"
                   onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
-                  className="absolute right-1.5 top-1.5 h-6 w-6 rounded-full bg-black/70 text-sm leading-none text-white"
+                  className="absolute right-1.5 top-1.5 h-6 w-6 rounded-full bg-ink/75 text-sm leading-none text-white"
                   aria-label={`Remove photo ${i + 1}`}
                 >×</button>
               </div>
@@ -112,14 +140,14 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 px-2 text-center text-neutral-400 transition hover:border-neutral-400"
+                className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-line-strong bg-cream px-2 text-center text-muted transition hover:border-cherry/60 hover:bg-blush/40"
               >
                 <span className="text-3xl">📷</span>
                 <span className="mt-1 text-xs">{photos.length === 0 ? "Add photos" : `Add ${PHOTO_HINTS[photos.length] ?? "photo"}`}</span>
               </button>
             )}
           </div>
-          <p className="mt-2 text-xs text-neutral-400">
+          <p className="mt-2 text-xs text-muted">
             Up to {MAX_PHOTOS}: front, back, brand/size tag, care tag, and close-ups of any flaws. Tag photos are how size, brand and material get read.
           </p>
           <input
@@ -136,25 +164,25 @@ export default function Home() {
             maxLength={500}
             rows={2}
             placeholder="Optional: anything the photos don't show — brand, size, era, fit, flaws."
-            className="mt-3 w-full resize-none rounded-xl border border-neutral-300 bg-white p-3 text-sm placeholder:text-neutral-400 focus:border-neutral-500 focus:outline-none"
+            className="mt-3 w-full resize-none rounded-xl border border-line-strong bg-surface p-3 text-sm placeholder:text-muted/70 focus:border-cherry focus:outline-none focus:ring-2 focus:ring-cherry/15"
           />
           <div className="mt-3 flex gap-3">
             {result && (
-              <button onClick={startOver} className="flex-1 rounded-xl border border-neutral-300 bg-white py-3 font-medium transition hover:bg-neutral-100">
+              <button onClick={startOver} className="flex-1 rounded-xl border border-line-strong bg-surface py-3 font-medium transition hover:bg-blush">
                 New item
               </button>
             )}
             <button
               onClick={analyze}
               disabled={!photos.length || status === "loading"}
-              className="flex-1 rounded-xl bg-neutral-900 py-3 font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40"
+              className="flex-1 rounded-xl bg-cherry py-3 font-semibold text-white shadow-sm shadow-cherry/30 transition hover:bg-cherry-dark disabled:opacity-40 disabled:shadow-none"
             >
               {status === "loading" ? "Analyzing…" : result ? "Re-analyze" : "Analyze"}
             </button>
           </div>
         </Card>
 
-        {error && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+        {error && <div className="mt-4 rounded-xl border border-cherry/30 bg-blush p-4 text-sm text-cherry-dark">{error}</div>}
 
         {result && draft && status === "done" && <Results key={runId} result={result} draft={draft} setDraft={setDraft} />}
       </div>
@@ -182,26 +210,32 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
       <Card>
         <Label>Price</Label>
         <div className="mt-2 flex items-end gap-4">
-          <div className="flex items-center text-3xl font-bold">
+          <div className="flex items-center font-display text-4xl font-semibold text-cherry">
             $<input
               type="number" inputMode="decimal" min={0} value={draft.price}
               onChange={(e) => set("price", e.target.value)}
-              className="w-28 rounded-lg border border-transparent bg-transparent px-1 hover:border-neutral-200 focus:border-neutral-400 focus:outline-none"
+              className="w-28 rounded-lg border border-transparent bg-transparent px-0.5 hover:border-line focus:border-cherry focus:outline-none"
               aria-label="Listing price"
             />
           </div>
-          <p className="pb-1 text-sm text-neutral-500">Suggested ${result.suggestedPrice} · range ${result.priceLow}–${result.priceHigh}</p>
+          <p className="pb-1 text-sm text-muted">Suggested ${result.suggestedPrice} · range ${result.priceLow}–${result.priceHigh}</p>
         </div>
-        <p className="mt-2 text-sm text-neutral-500">{result.priceReasoning}</p>
+        <p className="mt-2 text-sm text-muted">{result.priceReasoning}</p>
+        {result.mySales && result.mySales.matches.length >= 2 && (
+          <p className="mt-2 mr-2 inline-block rounded-full bg-blush px-2.5 py-0.5 text-xs font-semibold text-cherry">
+            ★ Based on {result.mySales.matches.length} of your own sales (median ${result.mySales.matchedMedian})
+          </p>
+        )}
         {result.comps ? (
-          <p className="mt-2 inline-block rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+          <p className="mt-2 inline-block rounded-full bg-sage-soft px-2.5 py-0.5 text-xs font-semibold text-sage">
             ✓ Based on {result.comps.sampleSize} matching Depop listings (median ${result.comps.median})
           </p>
         ) : (
-          <p className="mt-2 text-xs text-neutral-400">Estimate from the photos — not enough close Depop matches to ground it. Check Depop before pricing.</p>
+          <p className="mt-2 text-xs text-muted">Estimate from the photos — not enough close Depop matches to ground it. Check Depop before pricing.</p>
         )}
       </Card>
 
+      {result.mySales && <MySalesCard mine={result.mySales} />}
       {result.comps && <CompsCard comps={result.comps} />}
 
       {/* Description */}
@@ -223,9 +257,9 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
             className={input}
           />
         </Field>
-        <p className="mt-3 text-xs font-medium text-neutral-400">Preview</p>
-        <pre className="mt-1 whitespace-pre-wrap rounded-xl bg-neutral-50 p-3 font-sans text-sm text-neutral-700">{description}</pre>
-        <p className={`mt-1 text-right text-xs ${description.length > MAX_DESCRIPTION ? "text-red-600" : "text-neutral-400"}`}>
+        <p className="mt-3 text-xs font-medium text-muted">Preview</p>
+        <pre className="mt-1 whitespace-pre-wrap rounded-xl bg-cream p-3 font-sans text-sm text-ink-soft">{description}</pre>
+        <p className={`mt-1 text-right text-xs ${description.length > MAX_DESCRIPTION ? "text-cherry" : "text-muted"}`}>
           {description.length}/{MAX_DESCRIPTION}{description.length > MAX_DESCRIPTION ? " — too long for Depop, trim the pitch" : ""}
         </p>
       </Card>
@@ -234,16 +268,16 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
       <Card>
         <div className="flex items-center justify-between gap-3">
           <Label>Measurements</Label>
-          <select value={draft.measurementKind} onChange={(e) => set("measurementKind", e.target.value as MeasurementKind)} className="rounded-lg border border-neutral-300 bg-white px-2 py-1 text-sm">
+          <select value={draft.measurementKind} onChange={(e) => set("measurementKind", e.target.value as MeasurementKind)} className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-sm">
             {MEASUREMENT_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </div>
-        <p className="mt-1 text-xs text-neutral-400">Lay it flat and measure in inches. These go straight into the description — buyers ask for them more than anything else.</p>
+        <p className="mt-1 text-xs text-muted">Lay it flat and measure in inches. These go straight into the description — buyers ask for them more than anything else.</p>
         <div className="mt-3 grid grid-cols-2 gap-3">
           {fields.map((f) => (
             <label key={f.key} className="text-sm">
               <span className="font-medium">{f.label}</span>
-              {f.hint && <span className="block text-xs text-neutral-400">{f.hint}</span>}
+              {f.hint && <span className="block text-xs text-muted">{f.hint}</span>}
               <input
                 inputMode="decimal" placeholder='e.g. 22' value={draft.measurements[f.key] ?? ""}
                 onChange={(e) => set("measurements", { ...draft.measurements, [f.key]: e.target.value })}
@@ -260,27 +294,27 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
         <div className="mt-2 flex flex-wrap gap-2">
           {CONDITIONS.map((c) => (
             <button key={c} type="button" onClick={() => set("condition", c)}
-              className={`rounded-full border px-3 py-1 text-sm ${draft.condition === c ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white"}`}>{c}</button>
+              className={`rounded-full border px-3 py-1 text-sm ${draft.condition === c ? "border-cherry bg-cherry text-white" : "border-line-strong bg-surface"}`}>{c}</button>
           ))}
         </div>
-        <p className="mt-3 text-xs text-neutral-400">
+        <p className="mt-3 text-xs text-muted">
           {result.visibleFlaws.length ? "Flaws spotted in your photos — edit or add any it missed. Listing them up front prevents returns." : "No flaws spotted in the photos. Add any you know about."}
         </p>
         <div className="mt-2 space-y-2">
           {draft.flaws.map((f, i) => (
             <div key={i} className="flex gap-2">
               <input value={f} onChange={(e) => set("flaws", draft.flaws.map((x, j) => (j === i ? e.target.value : x)))} className={input} />
-              <button type="button" onClick={() => set("flaws", draft.flaws.filter((_, j) => j !== i))} className="rounded-lg border border-neutral-300 px-3 text-sm" aria-label="Remove flaw">×</button>
+              <button type="button" onClick={() => set("flaws", draft.flaws.filter((_, j) => j !== i))} className="rounded-lg border border-line-strong px-3 text-sm" aria-label="Remove flaw">×</button>
             </div>
           ))}
-          <button type="button" onClick={() => set("flaws", [...draft.flaws, ""])} className="text-sm font-medium text-neutral-600 hover:text-neutral-900">+ Add a flaw</button>
+          <button type="button" onClick={() => set("flaws", [...draft.flaws, ""])} className="text-sm font-medium text-ink-soft hover:text-cherry">+ Add a flaw</button>
         </div>
       </Card>
 
       {/* Depop form fields */}
       <Card>
         <Label>Depop listing details</Label>
-        <p className="mt-1 text-xs text-neutral-400">Fill these into Depop&apos;s Sell form. Tap copy on any text field.</p>
+        <p className="mt-1 text-xs text-muted">Fill these into Depop&apos;s Sell form. Tap copy on any text field.</p>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <SelectField label="Department" value={draft.department} options={DEPARTMENTS} onChange={(v) => set("department", v)} />
           <TextField label="Category" value={draft.category} onChange={(v) => set("category", v)} />
@@ -309,7 +343,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
           <div>
             <span className="font-medium">Packed weight</span>
             <p className="mt-2 text-lg font-semibold">{formatWeight(shipOz)}</p>
-            <p className="text-xs text-neutral-400">Pick the smallest Depop package size that covers this.</p>
+            <p className="text-xs text-muted">Pick the smallest Depop package size that covers this.</p>
           </div>
           <label>
             <span className="font-medium">What you paid ($)</span>
@@ -323,15 +357,15 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
             )}
           </div>
         </div>
-        <dl className="mt-4 space-y-1 rounded-xl bg-neutral-50 p-3 text-sm">
+        <dl className="mt-4 space-y-1 rounded-xl bg-cream p-3 text-sm">
           <Row k="Sale price" v={price} />
           <Row k={`Payment processing (${fees.processingPct}% + $${fees.processingFixed})`} v={-money.processing} />
           {boosted && <Row k={`Boost fee (${fees.boostPct}%)`} v={-money.boost} />}
           {sellerPaysShipping && <Row k="Shipping label" v={-money.shipping} />}
           <Row k="You receive" v={money.payout} bold />
-          <Row k="Profit after what you paid" v={money.net} bold color={money.net >= 0 ? "text-green-700" : "text-red-600"} />
+          <Row k="Profit after what you paid" v={money.net} bold color={money.net >= 0 ? "text-sage" : "text-cherry"} />
         </dl>
-        <details className="mt-2 text-xs text-neutral-500">
+        <details className="mt-2 text-xs text-muted">
           <summary className="cursor-pointer">Fee rates (Depop US defaults — edit if they&apos;ve changed)</summary>
           <div className="mt-2 grid grid-cols-3 gap-2">
             <FeeInput label="Processing %" value={fees.processingPct} onChange={(v) => setFees({ ...fees, processingPct: v })} />
@@ -341,9 +375,83 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
         </details>
       </Card>
 
-      <p className="text-center text-xs text-neutral-400">
+      <p className="text-center text-xs text-muted">
         Confidence: {result.confidence} · read from {result.photoCount} photo{result.photoCount === 1 ? "" : "s"} · prices are estimates.
       </p>
+    </div>
+  );
+}
+
+// Her sales history: import once from the CSV Depop lets sellers download; kept
+// only in this browser and sent along with each analysis for pricing.
+function SalesCard({ store, onChange }: { store: SalesStore | null; onChange: (v: SalesStore | null) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
+  const [open, setOpen] = useState(false);
+  async function onFile(f: File) {
+    const r = importSalesCsv(await f.text());
+    if ("error" in r) { setMsg({ text: r.error, bad: true }); return; }
+    onChange({ sales: r.sales, fileName: f.name, importedAt: Date.now() });
+    setMsg({ text: `Imported ${r.sales.length} sales${r.skipped ? ` (${r.skipped} rows without a price skipped)` : ""}.` });
+    setOpen(false);
+  }
+  const prices = store ? store.sales.map((x) => x.price).sort((a, b) => a - b) : [];
+  const med = prices.length ? prices[Math.floor(prices.length / 2)] : 0;
+  return (
+    <div className="mb-4 rounded-2xl border border-line bg-surface p-4 card-shadow">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">Your sales history</p>
+          <p className="truncate text-xs text-muted">
+            {store ? `${store.sales.length} sold items · typical $${med} · from ${store.fileName}` : "Import your Depop sales so prices are based on what you've actually sold."}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {store && <button type="button" onClick={() => { onChange(null); setMsg({ text: "Sales history removed from this device." }); }} className="rounded-lg px-2 py-1.5 text-xs text-muted hover:text-cherry">Remove</button>}
+          <button type="button" onClick={() => setOpen((o) => !o)} className="rounded-lg border border-line-strong px-3 py-1.5 text-xs font-semibold hover:bg-blush">{store ? "Update" : "Import"}</button>
+        </div>
+      </div>
+      {open && (
+        <div className="mt-3 rounded-xl bg-cream p-3 text-xs text-ink-soft">
+          <ol className="list-decimal space-y-1 pl-4">
+            <li>On depop.com (logged in as @{SHOP}), open your selling / account area and download your <b>sales history</b> as a CSV file.</li>
+            <li>Choose that file below. Any spreadsheet with an item description and a price column works too.</li>
+          </ol>
+          <p className="mt-2 text-muted">Only the item, brand, category, size, price and date are kept — buyer names and addresses are dropped. It&apos;s stored on this device only.</p>
+          <button type="button" onClick={() => inputRef.current?.click()} className="mt-3 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark">Choose CSV file</button>
+        </div>
+      )}
+      {msg && <p className={`mt-2 text-xs ${msg.bad ? "text-cherry" : "text-sage"}`}>{msg.text}</p>}
+      <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
+    </div>
+  );
+}
+
+function MySalesCard({ mine }: { mine: MySales }) {
+  return (
+    <div className="rounded-2xl border border-cherry/25 bg-blush p-5 card-shadow">
+      <p className="text-xs font-semibold uppercase tracking-wide text-cherry">Your past sales</p>
+      {mine.matches.length ? (
+        <>
+          <p className="mt-1 text-sm text-ink-soft">You&apos;ve sold {mine.matches.length} like this{mine.matchedMedian != null ? ` — usually for $${mine.matchedMedian}` : ""}.</p>
+          <ul className="mt-3 space-y-1.5">
+            {mine.matches.slice(0, 6).map((s, i) => (
+              <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate">{s.title}</p>
+                  <p className="text-xs text-muted">{[s.brand, s.size && `size ${s.size}`, s.date].filter(Boolean).join(" · ")}</p>
+                </div>
+                <span className="shrink-0 font-semibold">${s.price}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="mt-1 text-sm text-ink-soft">No close matches in your sales yet.</p>
+      )}
+      {mine.familyMedian != null && (
+        <p className="mt-3 text-xs text-muted">Across {mine.familyCount} sales of this kind of item, your typical price is ${mine.familyMedian}.</p>
+      )}
     </div>
   );
 }
@@ -355,39 +463,39 @@ function CompsCard({ comps }: { comps: Comps }) {
     <Card>
       <Label>Matching Depop listings</Label>
       <div className="mt-2 flex items-baseline gap-6">
-        <div><p className="text-2xl font-bold">${comps.low}–${comps.high}</p><p className="text-xs text-neutral-400">Range</p></div>
-        <div><p className="text-2xl font-bold">${comps.median}</p><p className="text-xs text-neutral-400">Median of {comps.sampleSize}</p></div>
+        <div><p className="text-2xl font-bold">${comps.low}–${comps.high}</p><p className="text-xs text-muted">Range</p></div>
+        <div><p className="text-2xl font-bold">${comps.median}</p><p className="text-xs text-muted">Median of {comps.sampleSize}</p></div>
       </div>
       <ul className="mt-3 space-y-2">
         {visible.map((l) => (
           <li key={l.url} className="flex items-center justify-between gap-3 text-sm">
             <div className="min-w-0">
-              <a href={l.url} target="_blank" rel="noopener noreferrer" className="block truncate text-blue-600 hover:underline">{l.title}</a>
-              <p className="truncate text-xs text-neutral-400">{l.similarity}% match · {l.brand}{l.size ? ` · size ${l.size}` : ""} · {l.reason}</p>
+              <a href={l.url} target="_blank" rel="noopener noreferrer" className="block truncate text-ink hover:text-cherry hover:underline">{l.title}</a>
+              <p className="truncate text-xs text-muted">{l.similarity}% match · {l.brand}{l.size ? ` · size ${l.size}` : ""} · {l.reason}</p>
             </div>
             <span className="shrink-0 font-medium">${l.price}</span>
           </li>
         ))}
       </ul>
       {comps.listings.length > 5 && (
-        <button onClick={() => setShowAll((s) => !s)} className="mt-3 w-full rounded-lg border border-neutral-200 py-2 text-sm font-medium text-neutral-600 hover:bg-neutral-50">
+        <button onClick={() => setShowAll((s) => !s)} className="mt-3 w-full rounded-lg border border-line py-2 text-sm font-medium text-ink-soft hover:bg-blush">
           {showAll ? "Show fewer" : `See all ${comps.listings.length}`}
         </button>
       )}
-      <p className="mt-3 text-xs text-neutral-400">
+      <p className="mt-3 text-xs text-muted">
         Live asking prices{comps.excluded ? ` · ${comps.excluded} other result${comps.excluded === 1 ? "" : "s"} left out as not comparable` : ""}. Items usually sell a little under these, so the suggestion sits below the median.
       </p>
     </Card>
   );
 }
 
-const input = "w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm focus:border-neutral-500 focus:outline-none";
+const input = "w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm focus:border-cherry focus:outline-none focus:ring-2 focus:ring-cherry/15";
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">{children}</div>;
+  return <div className="rounded-2xl border border-line bg-surface p-5 card-shadow">{children}</div>;
 }
 function Label({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">{children}</p>;
+  return <p className="text-xs font-medium uppercase tracking-wide text-muted">{children}</p>;
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="mt-3 block text-sm"><span className="font-medium">{label}</span><div className="mt-1">{children}</div></label>;
@@ -396,8 +504,8 @@ function TextField({ label, value, onChange, warn }: { label: string; value: str
   return (
     <label className="text-sm">
       <span className="flex items-center justify-between font-medium">{label}<CopyButton text={value} label="Copy" /></span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} className={`${input} mt-1 ${warn ? "border-amber-400" : ""}`} />
-      {warn && <span className="mt-1 block text-xs text-amber-600">{warn}</span>}
+      <input value={value} onChange={(e) => onChange(e.target.value)} className={`${input} mt-1 ${warn ? "border-honey" : ""}`} />
+      {warn && <span className="mt-1 block text-xs text-honey">{warn}</span>}
     </label>
   );
 }
@@ -422,7 +530,7 @@ function Chips({ label, options, value, max, onChange }: { label: string; option
           return (
             <button key={o} type="button" disabled={full}
               onClick={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
-              className={`rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-300 bg-white"} ${full ? "opacity-40" : ""}`}>
+              className={`rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-cherry bg-cherry text-white" : "border-line-strong bg-surface"} ${full ? "opacity-40" : ""}`}>
               {o}
             </button>
           );
@@ -437,15 +545,15 @@ function CopyButton({ text, label, primary }: { text: string; label: string; pri
     <button type="button"
       onClick={async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1400); } catch { /* clipboard blocked */ } }}
       className={primary
-        ? "shrink-0 rounded-lg bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700"
-        : "shrink-0 rounded px-1.5 text-xs font-normal text-neutral-400 hover:text-neutral-900"}>
+        ? "shrink-0 rounded-lg bg-cherry px-3 py-1.5 text-sm font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark"
+        : "shrink-0 rounded px-1.5 text-xs font-normal text-muted hover:text-cherry"}>
       {done ? "Copied!" : label}
     </button>
   );
 }
 function Row({ k, v, bold, color }: { k: string; v: number; bold?: boolean; color?: string }) {
   return (
-    <div className={`flex justify-between ${bold ? "border-t border-neutral-200 pt-1 font-semibold" : "text-neutral-600"} ${color ?? ""}`}>
+    <div className={`flex justify-between ${bold ? "border-t border-line pt-1 font-semibold" : "text-ink-soft"} ${color ?? ""}`}>
       <dt>{k}</dt><dd>{v < 0 ? `−$${Math.abs(v).toFixed(2)}` : `$${v.toFixed(2)}`}</dd>
     </div>
   );

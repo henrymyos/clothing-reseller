@@ -4,6 +4,7 @@ import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schem
 import { getDepopComps, quantile } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
 import { MAX_HASHTAGS, cleanHashtag } from "@/lib/depop";
+import { cleanSales, matchMySales } from "@/lib/sales";
 
 export const maxDuration = 60;
 
@@ -20,7 +21,7 @@ The description is for Depop: casual, specific, no keyword stuffing, no hashtags
 
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as { images?: unknown; image?: unknown; description?: unknown };
+    const body = (await req.json()) as { images?: unknown; image?: unknown; description?: unknown; sales?: unknown };
     // Accept the old single-image shape too, so a cached client keeps working.
     const raw = Array.isArray(body.images) ? body.images : body.image ? [body.image] : [];
     const images = raw.filter((i): i is string => typeof i === "string" && i.startsWith("data:image/")).slice(0, MAX_PHOTOS);
@@ -71,9 +72,23 @@ export async function POST(req: NextRequest) {
       console.error("Depop comps lookup failed:", e);
     }
 
-    // 3. Re-price on the matched listings.
-    if (comps) {
+    // 3. The seller's own sold items like this one (her real sold prices).
+    const sales = cleanSales(body.sales);
+    const mySales = sales.length ? matchMySales(analysis, sales) : null;
+    const hasMine = !!mySales && (mySales.matches.length > 0 || mySales.familyMedian != null);
+
+    // 4. Re-price on her sales + the matched Depop listings.
+    if (comps || hasMine) {
       try {
+        const mineBlock = mySales && hasMine
+          ? `The seller's OWN past sales — real SOLD prices from her shop, the strongest signal:
+${mySales.matches.length ? mySales.matches.map((s) => `- [${s.similarity}] sold "${s.title}"${s.brand ? ` (${s.brand})` : ""}${s.size ? ` size ${s.size}` : ""} for $${s.price}${s.date ? ` on ${s.date}` : ""}`).join("\n") : "- none closely matching"}
+${mySales.familyMedian != null ? `Her typical sold price for this kind of garment: $${mySales.familyMedian} (median of ${mySales.familyCount}).` : ""}`
+          : "";
+        const compsBlock = comps
+          ? `${comps.sampleSize} matching Depop listings — current ASKING prices, which run above what items sell for (low $${comps.low}, median $${comps.median}, high $${comps.high}):
+${comps.listings.map((l) => `- [${l.similarity}] ${l.brand} "${l.title}" size ${l.size ?? "?"} $${l.price}`).join("\n")}`
+          : "";
         const { object: pricing } = await withModelFallback(
           (model, abortSignal) =>
           generateObject({
@@ -82,35 +97,38 @@ export async function POST(req: NextRequest) {
             maxRetries: 0,
             schema: pricingSchema,
             system:
-              "You price secondhand clothing on Depop. You're given an item and Depop listings already checked to be close matches (with a similarity score). These are current ASKING prices, which run above what items actually sell for — so suggest a price a little under the matched median, adjusted for this item's condition and size. Weight closer matches more.",
+              "You price secondhand clothing for one Depop seller. Her own past sold prices are real outcomes for her shop and audience — trust them most. Other Depop listings are asking prices that run above sold prices, so price a little under their median. Adjust for this item's condition and size, and weight closer matches more. Write the reasoning to the seller directly, in one sentence using 'you'/'your' (e.g. 'Your 2 similar Gildan hoodies sold for $13–15, and matching Depop listings ask about $10.').",
             prompt: `Item: ${analysis.headline} — ${analysis.brand} ${analysis.itemType}, condition ${analysis.condition}, size ${analysis.size}${
               analysis.visibleFlaws.length ? `, flaws: ${analysis.visibleFlaws.join("; ")}` : ""
             }.
 First estimate from the photos: $${analysis.priceLow}–$${analysis.priceHigh} (suggested $${analysis.suggestedPrice}).
-${comps.sampleSize} matching Depop listings (low $${comps.low}, median $${comps.median}, high $${comps.high}):
-${comps.listings.map((l) => `- [${l.similarity}] ${l.brand} "${l.title}" size ${l.size ?? "?"} $${l.price}`).join("\n")}
-Return the final range and suggested price in USD.`,
+${mineBlock}
+${compsBlock}
+Return the final range and suggested price in USD, citing her sales when they exist.`,
           }),
           { timeoutMs: 12_000 }
         );
-        // Asking prices run high, so never land well above what the matches ask — judged by
-        // the closest matches (same/similar design) when there are enough of them.
-        const close = comps.listings.filter((l) => l.similarity >= 85).map((l) => l.price).sort((x, y) => x - y);
-        const anchor = close.length >= 3 ? quantile(close, 0.5) : comps.median;
-        const cap = Math.round(anchor * 1.1);
+        // Anchor: her own matched sold prices when she has 2+, else the closest Depop
+        // matches (asking prices run high, so the cap sits just above them).
+        const myPrices = (mySales?.matches ?? []).map((s) => s.price).sort((x, y) => x - y);
+        const close = (comps?.listings ?? []).filter((l) => l.similarity >= 85).map((l) => l.price).sort((x, y) => x - y);
+        const anchor = myPrices.length >= 2 ? quantile(myPrices, 0.5)
+          : comps ? (close.length >= 3 ? quantile(close, 0.5) : comps.median)
+          : mySales?.familyMedian ?? null;
+        const cap = anchor != null ? Math.round(anchor * (myPrices.length >= 2 ? 1.2 : 1.1)) : Infinity;
         const suggested = Math.max(1, Math.min(Math.round(pricing.suggestedPrice), cap));
-        // The range is the middle half of the matched prices, always containing the suggestion.
-        const sorted = comps.listings.map((l) => l.price).sort((x, y) => x - y);
+        // The range is the middle half of her matched sales (or the Depop matches), always containing the suggestion.
+        const band = myPrices.length >= 2 ? myPrices : comps ? comps.listings.map((l) => l.price).sort((x, y) => x - y) : [];
         analysis.suggestedPrice = suggested;
-        analysis.priceLow = Math.min(Math.round(quantile(sorted, 0.25)), suggested);
-        analysis.priceHigh = Math.max(Math.round(quantile(sorted, 0.75)), suggested);
+        analysis.priceLow = band.length ? Math.min(Math.round(quantile(band, 0.25)), suggested) : Math.min(Math.round(pricing.priceLow), suggested);
+        analysis.priceHigh = band.length ? Math.max(Math.round(quantile(band, 0.75)), suggested) : Math.max(Math.round(pricing.priceHigh), suggested);
         analysis.priceReasoning = pricing.priceReasoning;
       } catch (e) {
         console.error("Re-pricing failed, keeping the photo estimate:", e);
       }
     }
 
-    const response: AnalyzeResponse = { ...analysis, comps, photoCount: images.length };
+    const response: AnalyzeResponse = { ...analysis, comps, mySales: hasMine ? mySales : null, photoCount: images.length };
     return NextResponse.json(response);
   } catch (err) {
     console.error("Analyze error:", err);

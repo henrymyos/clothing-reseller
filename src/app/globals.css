@@ -1,26 +1,76 @@
 @import "tailwindcss";
 
+/* SnapList palette — warm boutique, built around the cherry red of the
+   soldbychica logo. Every colour in the UI comes from these tokens. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --cream: #fbf6f0;        /* page */
+  --surface: #ffffff;      /* cards */
+  --line: #efe2d6;         /* card borders, dividers */
+  --line-strong: #e2cdbd;  /* inputs, dashed drop zone */
+  --ink: #2b1a1f;          /* text */
+  --ink-soft: #5c464b;
+  --muted: #8f797c;
+  --cherry: #d7263d;       /* primary actions, selections */
+  --cherry-dark: #b51d31;
+  --blush: #fdecee;        /* soft highlights */
+  --blush-strong: #f8d3d8;
+  --sage: #2e8b67;         /* money / success */
+  --sage-soft: #e5f3ec;
+  --honey: #b8720a;        /* warnings */
+  --honey-soft: #fdf1dc;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --cream: #17100f;
+    --surface: #221819;
+    --line: #3a2a2c;
+    --line-strong: #4d383b;
+    --ink: #f7ecec;
+    --ink-soft: #dccbcc;
+    --muted: #a8908f;
+    --cherry: #ff5b6f;
+    --cherry-dark: #ff7a8b;
+    --blush: #3a1f24;
+    --blush-strong: #552a31;
+    --sage: #5fc79c;
+    --sage-soft: #193329;
+    --honey: #f2b04d;
+    --honey-soft: #3a2c13;
   }
 }
 
+@theme inline {
+  --color-cream: var(--cream);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-muted: var(--muted);
+  --color-cherry: var(--cherry);
+  --color-cherry-dark: var(--cherry-dark);
+  --color-blush: var(--blush);
+  --color-blush-strong: var(--blush-strong);
+  --color-sage: var(--sage);
+  --color-sage-soft: var(--sage-soft);
+  --color-honey: var(--honey);
+  --color-honey-soft: var(--honey-soft);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+.card-shadow {
+  box-shadow: 0 1px 2px rgb(43 26 31 / 0.04), 0 10px 28px -14px rgb(43 26 31 / 0.16);
+}
+
+::selection {
+  background: var(--blush-strong);
 }

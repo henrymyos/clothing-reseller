@@ -66,7 +66,7 @@ export const pricingSchema = z.object({
   priceLow: z.number(),
   priceHigh: z.number(),
   suggestedPrice: z.number().describe("Recommended Depop price in USD to sell within a few weeks."),
-  priceReasoning: z.string().describe("One sentence citing the matched listings (e.g. 'median of 9 matching Depop listings is $38')."),
+  priceReasoning: z.string().describe("One sentence to the seller, using 'you/your', citing her sales and/or the matched listings."),
 });
 
 export type CompListing = {
@@ -89,4 +89,4 @@ export type Comps = {
   listings: CompListing[];
 };
 
-export type AnalyzeResponse = Analysis & { comps: Comps | null; photoCount: number };
+export type AnalyzeResponse = Analysis & { comps: Comps | null; mySales: import("@/lib/sales").MySales | null; photoCount: number };
