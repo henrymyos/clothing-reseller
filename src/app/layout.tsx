@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SnapList — Snap, price & list your clothes",
+  title: "SnapList — Snap, price & list your clothes on Depop",
   description:
-    "Photograph a clothing item and instantly get the best resale platform (Depop or eBay), a price estimate, and a ready-to-post listing.",
+    "Photograph a clothing item and get a ready-to-post Depop listing: description, measurements, condition, tags, a price from matching Depop listings, and your take-home profit.",
 };
 
 export default function RootLayout({

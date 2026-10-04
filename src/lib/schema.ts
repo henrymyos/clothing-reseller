@@ -1,108 +1,92 @@
 import { z } from "zod";
+import { AGES, COLORS, CONDITIONS, DEPARTMENTS, MEASUREMENT_KINDS, SOURCES, STYLES } from "@/lib/depop";
 
+// What the vision model produces from the photos (+ seller notes): everything
+// Depop's Sell form asks for, plus what we need to find comparable listings.
 export const analysisSchema = z.object({
-  title: z
+  headline: z
     .string()
     .describe(
-      "A catchy, search-optimized listing title (max ~80 chars) a reseller would use, e.g. 'Vintage Nike Embroidered Swoosh Hoodie - Grey M'"
+      "First line of the Depop description — it shows as the listing's title in the feed. Brand + era/style + item + color + size when known, under ~70 chars, e.g. 'Vintage 90s Carhartt Detroit Jacket Brown Duck Canvas XL'."
     ),
-  description: z
+  body: z
     .string()
     .describe(
-      "A short, appealing 2-3 sentence listing description highlighting style, fit, condition and standout details."
+      "Two or three short sentences selling the item: style, fit, standout details. No hashtags, no size/measurement/condition lines (those are added separately)."
     ),
-  itemType: z.string().describe("Type of garment, e.g. 'Hoodie', 'Denim Jacket', 'Midi Dress'."),
-  brand: z
-    .string()
-    .describe("Best guess of the brand from logos/tags/style, or 'Unbranded' / 'Unknown' if not identifiable."),
-  condition: z
-    .enum(["New with tags", "Like new", "Excellent", "Good", "Fair", "Worn"])
-    .describe("Estimated condition based on visible wear in the photo."),
-  color: z.string().describe("Primary color(s)."),
-  material: z.string().describe("Likely material if discernible, otherwise 'Unknown'."),
-  size: z.string().describe("Visible size if shown on a tag, otherwise 'Not visible'."),
-  tags: z
+  itemType: z.string().describe("Garment type, e.g. 'Hoodie', 'Denim jacket', 'Midi dress'."),
+  brand: z.string().describe("Brand read from logos/tags or the seller's notes; 'Unbranded' if none, 'Unknown' if unreadable."),
+  brandTier: z
+    .enum(["designer", "mainstream", "blank", "unbranded"])
+    .describe(
+      "designer = luxury/hype labels; mainstream = recognised fashion/sport/workwear brands; blank = blank-garment makers sold for printing (Gildan, Hanes, Fruit of the Loom, Jerzees, Port & Company, Bella+Canvas…) where the graphic matters, not the brand; unbranded = no brand."
+    ),
+  distinctiveFeatures: z
     .array(z.string())
-    .max(8)
-    .describe("Up to 8 short search keywords/hashtags buyers would use (no '#')."),
-
-  ebaySearchQuery: z
+    .max(5)
+    .describe("What makes this exact piece identifiable: graphic/print subject, text on it, logo placement, collab, wash, cut. Short phrases."),
+  department: z.enum(DEPARTMENTS).describe("Depop department this should be listed under."),
+  category: z.string().describe("Depop category, e.g. 'Tops', 'Bottoms', 'Coats & jackets', 'Dresses', 'Footwear', 'Accessories'."),
+  subcategory: z.string().describe("Depop subcategory, e.g. 'Hoodies', 'Sweatshirts', 'T-shirts', 'Jeans', 'Jackets'."),
+  size: z.string().describe("Size exactly as printed on the tag (e.g. 'M', 'US 8', '32x30'), or from the seller's notes; 'Not visible' if neither shows it."),
+  sizeSource: z.enum(["tag", "notes", "estimated", "unknown"]),
+  sizeTagText: z
     .string()
-    .describe(
-      "A concise eBay search query that would surface comparable listings for this exact item — e.g. 'Nike vintage embroidered swoosh hoodie grey'. Brand + key descriptors, no condition words."
-    ),
-
-  platform: z
-    .enum(["depop", "ebay", "both"])
-    .describe(
-      "Best platform to list on. Depop favors trendy/streetwear/vintage/Y2K/aesthetic items for a younger audience; eBay favors established brands, collectibles, formalwear, and higher-value or hard-to-find items with broad reach."
-    ),
-  platformReasoning: z
+    .describe("The exact characters you can actually read on the size tag (e.g. 'L', 'M/M', '32 x 30'), or '' if no size tag is legible. Never fill this from a guess."),
+  condition: z.enum(CONDITIONS).describe("Depop condition, judged from every photo (be conservative if wear is visible)."),
+  visibleFlaws: z
+    .array(z.string())
+    .max(6)
+    .describe("Each visible flaw with its location, e.g. 'small stain on left cuff', 'light pilling on front'. Empty if none visible."),
+  colors: z.array(z.enum(COLORS)).min(1).max(2).describe("Up to two Depop colours, main colour first."),
+  styles: z.array(z.enum(STYLES)).max(3).describe("Up to three Depop style tags that genuinely fit."),
+  age: z.enum(AGES).describe("Depop age: 'Modern' unless the tag/construction clearly dates it."),
+  source: z.enum(SOURCES).describe("Depop source — usually 'Preloved', or 'Vintage' for 20+ year old pieces, 'Deadstock' for unworn old stock."),
+  material: z.string().describe("Fabric content from the care tag if visible (e.g. '80% cotton, 20% polyester'), else a best guess prefixed with 'Likely', or 'Unknown'."),
+  hashtags: z.array(z.string()).max(5).describe("Up to 5 Depop hashtags buyers search, no '#', lowercase, e.g. 'vintagecarhartt', 'workwear'."),
+  measurementKind: z.enum(MEASUREMENT_KINDS).describe("Which measurements apply: top, bottoms, shorts, dress, skirt, shoes, accessory."),
+  estimatedWeightOz: z.number().describe("Item weight in ounces (without packaging), e.g. tee ~6, hoodie ~20, jeans ~22, heavy jacket ~45."),
+  searchQuery: z
     .string()
-    .describe("One or two sentences explaining the platform choice for this specific item."),
-
-  currency: z.literal("USD"),
-  priceLow: z.number().describe("Typical low end of recent resale prices in USD."),
-  priceHigh: z.number().describe("Typical high end of recent resale prices in USD."),
-  suggestedPrice: z.number().describe("Recommended listing price in USD to sell reasonably quickly."),
-  priceReasoning: z
+    .describe("Depop search for this exact piece: brand (if not blank/unbranded) + distinctive feature + item type, e.g. 'carhartt detroit jacket brown'."),
+  searchQueryBroad: z
     .string()
-    .describe("One sentence explaining the price range (brand desirability, condition, demand)."),
-
-  confidence: z
-    .enum(["high", "medium", "low"])
-    .describe("How confident you are overall, given image quality and how identifiable the item is."),
+    .describe("A broader fallback search for close alternatives, e.g. 'carhartt work jacket'."),
+  priceLow: z.number().describe("Low end of realistic Depop prices in USD for this item in this condition."),
+  priceHigh: z.number().describe("High end in USD."),
+  suggestedPrice: z.number().describe("Price in USD to sell within a few weeks on Depop."),
+  priceReasoning: z.string().describe("One sentence on what drives the price."),
+  confidence: z.enum(["high", "medium", "low"]),
 });
 
 export type Analysis = z.infer<typeof analysisSchema>;
 
-// Refined pricing produced after grounding on real eBay comps.
+// Re-pricing after grounding on matched Depop listings.
 export const pricingSchema = z.object({
-  priceLow: z.number().describe("Realistic low end in USD, ignoring obvious outliers in the comps."),
-  priceHigh: z.number().describe("Realistic high end in USD, ignoring obvious outliers."),
-  suggestedPrice: z
-    .number()
-    .describe("Recommended listing price in USD to sell reasonably quickly given the comps."),
-  priceReasoning: z
-    .string()
-    .describe("One sentence citing the live comps (e.g. 'median of 24 active listings is $38')."),
+  priceLow: z.number(),
+  priceHigh: z.number(),
+  suggestedPrice: z.number().describe("Recommended Depop price in USD to sell within a few weeks."),
+  priceReasoning: z.string().describe("One sentence citing the matched listings (e.g. 'median of 9 matching Depop listings is $38')."),
 });
 
-export type Pricing = z.infer<typeof pricingSchema>;
-
-// Real market data pulled from eBay. Defined here (no server deps) so the client can import the type.
-export type MarketSample = { title: string; price: number; url: string };
-
-export type MarketData = {
-  source: "ebay-active" | "ebay-sold";
-  sampleSize: number;
-  currency: string;
-  low: number;
-  median: number;
-  high: number;
-  samples: MarketSample[];
-};
-
-// Similar listings found via web search (Google-style, across resale marketplaces).
-export type WebListing = {
+export type CompListing = {
   title: string;
   price: number;
   url: string;
-  source: string; // e.g. "eBay", "Depop", "Poshmark"
+  brand: string;
+  size: string | null;
+  similarity: number; // 0–100, how close a match it is
+  reason: string;
 };
 
-export type WebMarketData = {
+export type Comps = {
   query: string;
   sampleSize: number;
-  currency: string;
+  excluded: number;   // results judged not comparable (or price outliers)
   low: number;
-  high: number;
-  average: number;
   median: number;
-  listings: WebListing[];
+  high: number;
+  listings: CompListing[];
 };
 
-export type AnalyzeResponse = Analysis & {
-  marketData: MarketData | null;
-  webComps: WebMarketData | null;
-};
+export type AnalyzeResponse = Analysis & { comps: Comps | null; photoCount: number };

@@ -1,52 +1,44 @@
 # SnapList
 
-Photograph a clothing item → get the **best platform** to sell it on (Depop, eBay, or both), a **price estimate**, and a **ready-to-post listing** (title, description, brand, condition, tags).
+Snap a clothing item → get a **ready-to-post Depop listing**: description with hashtags,
+measurements, condition and flaws, every field Depop's Sell form asks for, a price grounded
+on matching Depop listings, packed weight, and your take-home profit after fees.
 
-Built with Next.js (App Router) + the Vercel AI SDK, using a Claude vision model through the Vercel AI Gateway.
+Built with Next.js (App Router) + the Vercel AI SDK, with a vision model through the Vercel
+AI Gateway and Depop search via [Exa](https://exa.ai).
 
 ## Setup
 
-1. Get a Vercel AI Gateway key from your [Vercel dashboard](https://vercel.com) (AI Gateway tab).
-2. Copy the env file and paste your key:
-   ```bash
-   cp .env.local.example .env.local
-   # then edit .env.local and set AI_GATEWAY_API_KEY=...
-   ```
-3. Run it:
-   ```bash
-   npm run dev
-   ```
-4. Open http://localhost:3000, take/upload a photo, hit **Analyze**.
+```bash
+vercel env pull .env.local   # AI Gateway (OIDC) + EXA_API_KEY
+npm install
+npm run dev                  # http://localhost:3000
+npm test                     # unit tests (vitest)
+```
 
 ## How it works
 
-- `src/app/page.tsx` — upload/camera UI and results display.
-- `src/app/api/analyze/route.ts` — sends the photo to the vision model and returns structured JSON.
-- `src/lib/schema.ts` — the Zod schema that defines (and validates) the analysis: platform, price range, description, etc.
+1. **Photos** (`src/app/page.tsx`): up to 6 — front, back, brand/size tag, care tag, flaws.
+   Resized in the browser before upload.
+2. **Analysis** (`src/app/api/analyze/route.ts`, `src/lib/schema.ts`): one vision call reads
+   every photo and fills in Depop's fields (department, category, size, condition, colours,
+   styles, age, source, material), visible flaws, weight, and search queries. A size "from
+   the tag" must quote the text read off it, otherwise it's reported as not visible.
+3. **Comps** (`src/lib/comps.ts`): up to three Depop searches, then each result is read from
+   the structured line Depop puts on product pages (`# Brand Men's Colour Type $price Size X
+   Condition`) — no AI. Fixed rules decide what counts: same garment family; same brand for
+   real brands; shared design (or same blank maker) for blanks; kids only vs kids; UK £
+   listings skipped; price outliers trimmed.
+4. **Price**: one more call prices the item off the matched listings. These are live asking
+   prices (Depop doesn't expose sold prices), so the suggestion is capped just above the
+   closest matches' median and the range is the middle half of the matched prices.
+5. **Listing** (`src/lib/depop.ts`): everything is editable; the Depop description (headline,
+   pitch, size, measurements, condition + flaws, material, ≤5 hashtags) is rebuilt live and
+   copied in one tap. Shipping weight and fee/profit math use editable Depop US defaults.
 
-## eBay market data
+## Models
 
-When `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET` are set, the app queries the **eBay Browse API**
-for comparable current listings, then re-prices the item grounded on that real data and shows
-the comps in the UI. Without the keys it falls back to a pure AI estimate.
-
-To get keys: create an app at [developer.ebay.com](https://developer.ebay.com), then use your
-**Production** App ID (Client ID) and Cert ID (Client Secret).
-
-> Note: the Browse API returns **active** listings (current asking prices), which run slightly
-> above final sold prices — the model accounts for this. For true **sold** prices, eBay's
-> Marketplace Insights API exists but requires special approval; if you're granted access, swap
-> the URL/scope in `src/lib/ebay.ts` (the response shape is the same).
-
-## Next steps
-
-- Push listings directly to Depop/eBay via their APIs, save listing history, batch-analyze
-  multiple photos, or add background removal for cleaner listing images.
-
-## Deploy
-
-```bash
-npx vercel
-```
-
-On Vercel the AI Gateway is wired up automatically (no key needed in env).
+`src/lib/model.ts` tries Claude Haiku, then free-tier fallbacks. On the AI Gateway's free tier
+Claude isn't available, so calls run on Gemini Flash Lite; refused models are remembered for
+15 minutes, rate limits get one quick retry, and every call has a time limit so a stuck
+request can't exceed the 60s function limit.

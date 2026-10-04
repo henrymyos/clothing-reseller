@@ -7,24 +7,56 @@ export const PRIMARY_MODEL = "anthropic/claude-haiku-4-5";
 // Different providers so one model's free-tier rate limit doesn't sink the whole chain.
 export const FALLBACK_MODELS = ["google/gemini-2.5-flash-lite", "openai/gpt-5-nano"];
 
-function isTierOrRateIssue(e: unknown): boolean {
+// A model the gateway refused for the billing tier stays refused for a while —
+// remember that so every call doesn't spend a round trip rediscovering it.
+// Rate limits are temporary, so those are only skipped briefly.
+const TIER_SKIP_MS = 15 * 60 * 1000;
+const RATE_SKIP_MS = 20 * 1000;
+const skipUntil = new Map<string, number>();
+
+function issueKind(e: unknown): "tier" | "rate" | "slow" | null {
+  if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return "slow";
   const msg = e instanceof Error ? e.message : String(e);
-  return /free tier|no_providers_available|rate.?limit/i.test(msg);
+  if (/rate.?limit/i.test(msg)) return "rate";
+  if (/free tier|no_providers_available/i.test(msg)) return "tier";
+  return null;
 }
 
 /**
  * Runs a model call with PRIMARY_MODEL, falling through FALLBACK_MODELS when the
- * gateway rejects a model as unavailable or rate-limited on the current billing tier.
+ * gateway rejects a model as unavailable or rate-limited on the current billing tier,
+ * or when a call hangs past `timeoutMs` (free-tier requests occasionally queue for
+ * a minute — abandoning them keeps the whole request inside the function limit).
  */
-export async function withModelFallback<T>(run: (model: string) => Promise<T>): Promise<T> {
+export async function withModelFallback<T>(
+  run: (model: string, abortSignal: AbortSignal) => Promise<T>,
+  { timeoutMs = 25_000, maxAttempts = Infinity }: { timeoutMs?: number; maxAttempts?: number } = {}
+): Promise<T> {
+  const chain = [PRIMARY_MODEL, ...FALLBACK_MODELS];
+  const now = Date.now();
+  const usable = chain.filter((m) => (skipUntil.get(m) ?? 0) <= now);
   let lastError: unknown;
-  for (const model of [PRIMARY_MODEL, ...FALLBACK_MODELS]) {
+  for (const model of (usable.length ? usable : chain).slice(0, maxAttempts)) {
+    const t = Date.now();
     try {
-      return await run(model);
+      let out: T;
+      try {
+        out = await run(model, AbortSignal.timeout(timeoutMs));
+      } catch (e) {
+        // A rate limit usually clears in a moment — wait briefly and retry once.
+        if (issueKind(e) !== "rate") throw e;
+        await new Promise((r) => setTimeout(r, 1200));
+        out = await run(model, AbortSignal.timeout(timeoutMs));
+      }
+      console.log(`model ${model} ok in ${Date.now() - t}ms`);
+      return out;
     } catch (e) {
-      if (!isTierOrRateIssue(e)) throw e;
+      const kind = issueKind(e);
+      if (!kind) throw e;
       lastError = e;
-      console.warn(`${model} unavailable on this AI Gateway tier, trying next fallback`);
+      skipUntil.set(model, Date.now() + (kind === "tier" ? TIER_SKIP_MS : RATE_SKIP_MS));
+      const why = kind === "tier" ? "unavailable on this AI Gateway tier" : kind === "rate" ? "rate-limited" : "timed out";
+      console.warn(`${model} ${why} (${Date.now() - t}ms), trying next fallback`);
     }
   }
   throw lastError;
