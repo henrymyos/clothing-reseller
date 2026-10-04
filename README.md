@@ -38,7 +38,19 @@ npm test                     # unit tests (vitest)
    matched sales when she has 2+, otherwise capped just above the closest Depop matches' median.
 6. **Listing** (`src/lib/depop.ts`): everything is editable; the Depop description (headline,
    pitch, size, measurements, condition + flaws, material, ≤5 hashtags) is rebuilt live and
-   copied in one tap. Shipping weight and fee/profit math use editable Depop US defaults.
+   copied in one tap. Shipping weight and fee/profit math use editable Depop US defaults
+   (processing 3.3% + $0.45 on item + shipping + tax, 12% boost fee — checked against real payouts).
+   "Copy row" puts the new item on the clipboard in her inventory sheet's column order.
+
+## Shop & profit (`/inventory`)
+
+Paste her inventory sheet from Google Sheets, link it (if shared "anyone with the link"; read
+via `/api/sheet`, Google Sheets URLs only), or upload a CSV. Parsed and stored in the browser
+(`src/lib/inventory.ts`, `src/lib/inventoryStore.ts`). It works out profit, return on cost and
+days-to-sell per item, totals, fees (and how much boosting costs), monthly results, results by
+kind of item and by sourcing trip, best/worst items, markdown suggestions for stale stock
+(never below break-even), sheet problems (duplicate SKUs etc.), and a full CSV export. Sold items
+from the sheet also price new listings when no Depop sales export is loaded.
 
 ## Models
 

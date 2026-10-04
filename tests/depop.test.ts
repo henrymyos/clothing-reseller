@@ -48,19 +48,25 @@ describe("hashtags", () => {
 });
 
 describe("profit", () => {
-  it("applies processing fee only by default", () => {
+  it("charges processing on item + buyer shipping + tax", () => {
     const r = profit({ price: 40, cost: 5, boosted: false, sellerPaysShipping: false, shippingCost: 9 });
-    expect(r.processing).toBeCloseTo(40 * 0.033 + 0.45, 2);
+    const proc = (40 * 1.07 + 3.99) * 0.033 + 0.45;
+    expect(r.processing).toBeCloseTo(proc, 2);
     expect(r.boost).toBe(0);
     expect(r.shipping).toBe(0);
-    expect(r.payout).toBeCloseTo(40 - 1.77, 2);
-    expect(r.net).toBeCloseTo(40 - 1.77 - 5, 2);
+    expect(r.payout).toBeCloseTo(40 - proc, 2);
+    expect(r.net).toBeCloseTo(40 - proc - 5, 2);
+  });
+  it("matches real Depop payouts", () => {
+    // Real Depop receipts: a $28 unboosted sale paid out $26.42; an $18 boosted one $14.61.
+    expect(profit({ price: 28, cost: 0, boosted: false, sellerPaysShipping: false, shippingCost: 0 }).payout).toBeCloseTo(26.42, 1);
+    expect(profit({ price: 18, cost: 0, boosted: true, sellerPaysShipping: false, shippingCost: 0 }).payout).toBeCloseTo(14.61, 1);
   });
   it("adds boost and seller-paid shipping", () => {
     const r = profit({ price: 50, cost: 0, boosted: true, sellerPaysShipping: true, shippingCost: 7.5 });
-    expect(r.boost).toBe(4);
+    expect(r.boost).toBe(6);
     expect(r.shipping).toBe(7.5);
-    expect(r.payout).toBeCloseTo(50 - (1.65 + 0.45) - 4 - 7.5, 2);
+    expect(r.payout).toBeCloseTo(50 - (50 * 1.07 * 0.033 + 0.45) - 6 - 7.5, 2);
   });
   it("charges nothing on a $0 price", () => {
     expect(profit({ price: 0, cost: 0, boosted: false, sellerPaysShipping: false, shippingCost: 0 }).processing).toBe(0);

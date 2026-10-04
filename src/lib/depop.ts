@@ -72,10 +72,13 @@ export const MAX_DESCRIPTION = 1000;    // Depop description character limit
 export const MAX_STYLES = 3;
 export const MAX_COLORS = 2;
 
-// Depop US: no selling fee since 2024, but every sale pays payment processing,
-// and a Boosted listing adds a fee when it sells. Shown as editable defaults in
-// the UI because Depop changes these — the seller can correct them.
-export const DEFAULT_FEES = { processingPct: 3.3, processingFixed: 0.45, boostPct: 8 };
+// Depop US: no selling fee since 2024, but every sale pays payment processing —
+// charged on everything the buyer pays (item + shipping + sales tax) — and a
+// Boosted listing adds a fee on the item price when it sells. Checked against
+// real payouts (Oct 2026): unboosted sales match to within cents, boosted ones
+// cost 12%. Editable in the UI because Depop changes these.
+export const DEFAULT_FEES = { processingPct: 3.3, processingFixed: 0.45, boostPct: 12, buyerShipping: 3.99, salesTaxPct: 7 };
+export type Fees = typeof DEFAULT_FEES;
 
 // Typical packaging adds a few ounces (poly mailer, tissue, label).
 export const PACKAGING_OZ = 3;
@@ -132,13 +135,15 @@ export type ProfitInput = {
   boosted: boolean;
   sellerPaysShipping: boolean;
   shippingCost: number;     // label cost, only counted when the seller pays
-  fees?: typeof DEFAULT_FEES;
+  fees?: Fees;
 };
 
 export function profit(p: ProfitInput) {
   const f = p.fees ?? DEFAULT_FEES;
   const price = Math.max(0, p.price || 0);
-  const processing = price > 0 ? (price * f.processingPct) / 100 + f.processingFixed : 0;
+  // What the buyer pays, which processing is charged on: shipping is theirs unless the seller covers it.
+  const buyerPays = price * (1 + f.salesTaxPct / 100) + (p.sellerPaysShipping ? 0 : f.buyerShipping);
+  const processing = price > 0 ? (buyerPays * f.processingPct) / 100 + f.processingFixed : 0;
   const boost = p.boosted ? (price * f.boostPct) / 100 : 0;
   const shipping = p.sellerPaysShipping ? Math.max(0, p.shippingCost || 0) : 0;
   const payout = price - processing - boost - shipping;

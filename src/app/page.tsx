@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import type { AnalyzeResponse, Comps } from "@/lib/schema";
 import { importSalesCsv, type MySales, type Sale } from "@/lib/sales";
 import {
@@ -9,6 +10,9 @@ import {
   buildDescription, cleanHashtag, formatWeight, profit, shippedWeightOz,
   type Condition, type MeasurementKind,
 } from "@/lib/depop";
+import { Card, Label, input } from "@/components/ui";
+import { inventoryToSales, nextSku, sheetRow, type InvItem } from "@/lib/inventory";
+import { readInventory } from "@/lib/inventoryStore";
 
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
@@ -51,11 +55,14 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [runId, setRunId] = useState(0); // remounts the results (and their profit inputs) per analysis
   const [sales, setSales] = useState<SalesStore | null>(null);
+  const [inventory, setInventory] = useState<InvItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Her sales history lives only in this browser (see SalesCard).
+  // Her sales history and inventory sheet live only in this browser (see SalesCard and /inventory).
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setSales(readSales()); }, []);
+  useEffect(() => { setSales(readSales()); setInventory(readInventory()?.items ?? []); }, []);
+  // Without a Depop sales export, the sold items in her inventory sheet price new listings.
+  const pricingSales = sales?.sales ?? (inventory.length ? inventoryToSales(inventory) : undefined);
   function saveSales(v: SalesStore | null) {
     setSales(v);
     try { if (v) localStorage.setItem(SALES_KEY, JSON.stringify(v)); else localStorage.removeItem(SALES_KEY); } catch { /* storage full or blocked */ }
@@ -80,7 +87,7 @@ export default function Home() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ images: photos, description: notes.trim() || undefined, sales: sales?.sales }),
+        body: JSON.stringify({ images: photos, description: notes.trim() || undefined, sales: pricingSales }),
       });
       const text = await res.text();
       let data: AnalyzeResponse & { error?: string };
@@ -116,9 +123,10 @@ export default function Home() {
             Snap<span className="text-cherry">List</span>
           </h1>
           <p className="mx-auto mt-2 max-w-md text-ink-soft">Snap your item — get a ready-to-post Depop listing, priced on your own sales and matching Depop listings.</p>
+          <Link href="/inventory" className="mt-3 inline-block text-sm font-semibold text-cherry hover:underline">Shop &amp; profit →</Link>
         </header>
 
-        <SalesCard store={sales} onChange={saveSales} />
+        <SalesCard store={sales} onChange={saveSales} fallback={!sales && pricingSales ? pricingSales.length : 0} />
 
         {/* Photos + notes */}
         <Card>
@@ -184,17 +192,18 @@ export default function Home() {
 
         {error && <div className="mt-4 rounded-xl border border-cherry/30 bg-blush p-4 text-sm text-cherry-dark">{error}</div>}
 
-        {result && draft && status === "done" && <Results key={runId} result={result} draft={draft} setDraft={setDraft} />}
+        {result && draft && status === "done" && <Results key={runId} result={result} draft={draft} setDraft={setDraft} sku={nextSku(inventory)} />}
       </div>
     </main>
   );
 }
 
-function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: Draft; setDraft: (d: Draft) => void }) {
+function Results({ result, draft, setDraft, sku }: { result: AnalyzeResponse; draft: Draft; setDraft: (d: Draft) => void; sku: string }) {
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft({ ...draft, [k]: v });
   const description = useMemo(() => buildDescription(draft), [draft]);
   const [cost, setCost] = useState("");
-  const [boosted, setBoosted] = useState(false);
+  const [boosted, setBoosted] = useState(true); // she boosts most listings
+  const [sheetName, setSheetName] = useState(`${result.brand && !/unbranded|unknown/i.test(result.brand) ? `${result.brand} ` : ""}${result.colors[0]?.toLowerCase() ?? ""} ${result.itemType.toLowerCase()}`.replace(/\s+/g, " ").trim());
   const [sellerPaysShipping, setSellerPaysShipping] = useState(false);
   const [shippingCost, setShippingCost] = useState("");
   const [fees, setFees] = useState(DEFAULT_FEES);
@@ -371,8 +380,19 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
             <FeeInput label="Processing %" value={fees.processingPct} onChange={(v) => setFees({ ...fees, processingPct: v })} />
             <FeeInput label="Processing $" value={fees.processingFixed} onChange={(v) => setFees({ ...fees, processingFixed: v })} />
             <FeeInput label="Boost %" value={fees.boostPct} onChange={(v) => setFees({ ...fees, boostPct: v })} />
+            <FeeInput label="Buyer shipping $" value={fees.buyerShipping} onChange={(v) => setFees({ ...fees, buyerShipping: v })} />
+            <FeeInput label="Sales tax %" value={fees.salesTaxPct} onChange={(v) => setFees({ ...fees, salesTaxPct: v })} />
           </div>
+          <p className="mt-1">Processing is charged on everything the buyer pays — item, shipping and tax.</p>
         </details>
+        <div className="mt-4 rounded-xl border border-line p-3 text-sm">
+          <p className="font-medium">Add to your inventory sheet</p>
+          <p className="mt-0.5 text-xs text-muted">Copies a row{sku ? ` (SKU ${sku})` : ""} — click the first empty cell in the SOLD? column of your sheet and paste.</p>
+          <div className="mt-2 flex gap-2">
+            <input value={sheetName} onChange={(e) => setSheetName(e.target.value)} className={input} aria-label="Name for your sheet" />
+            <CopyButton primary label="Copy row" text={sheetRow({ sku, name: sheetName, cost, listPrice: draft.price, date: new Date() })} />
+          </div>
+        </div>
       </Card>
 
       <p className="text-center text-xs text-muted">
@@ -384,7 +404,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
 
 // Her sales history: import once from the CSV Depop lets sellers download; kept
 // only in this browser and sent along with each analysis for pricing.
-function SalesCard({ store, onChange }: { store: SalesStore | null; onChange: (v: SalesStore | null) => void }) {
+function SalesCard({ store, onChange, fallback }: { store: SalesStore | null; onChange: (v: SalesStore | null) => void; fallback: number }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null);
   const [open, setOpen] = useState(false);
@@ -403,7 +423,7 @@ function SalesCard({ store, onChange }: { store: SalesStore | null; onChange: (v
         <div className="min-w-0">
           <p className="text-sm font-semibold">Your sales history</p>
           <p className="truncate text-xs text-muted">
-            {store ? `${store.sales.length} sold items · typical $${med} · from ${store.fileName}` : "Import your Depop sales so prices are based on what you've actually sold."}
+            {store ? `${store.sales.length} sold items · typical $${med} · from ${store.fileName}` : fallback ? `Using the ${fallback} sold items in your inventory sheet. Import your Depop sales for sizes and full titles.` : "Import your Depop sales so prices are based on what you've actually sold."}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
@@ -489,14 +509,6 @@ function CompsCard({ comps }: { comps: Comps }) {
   );
 }
 
-const input = "w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-sm focus:border-cherry focus:outline-none focus:ring-2 focus:ring-cherry/15";
-
-function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-line bg-surface p-5 card-shadow">{children}</div>;
-}
-function Label({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-medium uppercase tracking-wide text-muted">{children}</p>;
-}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="mt-3 block text-sm"><span className="font-medium">{label}</span><div className="mt-1">{children}</div></label>;
 }
