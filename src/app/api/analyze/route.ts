@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schema";
 import { getDepopComps } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
+import { clientIp, rateLimited } from "@/lib/rateLimit";
 import { MAX_HASHTAGS, cleanHashtag, enrichHeadline } from "@/lib/depop";
 import { cleanSales, matchMySales } from "@/lib/sales";
 import { explainPrice, finalPrice, priceAnchor, type PriceBasis } from "@/lib/pricing";
@@ -26,6 +27,10 @@ Descriptions follow the seller's own style — a keyword-rich first line, then t
 Write first lines like these, but work in more of the words a buyer would actually search for this exact piece — always at least two style words (indie, skater, surfer, grunge, y2k, vintage, preppy, cottagecore, granola, workwear, casual…) plus fit, era, fabric or item synonyms — while keeping it readable. If the seller's notes describe the item, use them as facts but still write a fuller, keyword-rich first line.`;
 
 export async function POST(req: NextRequest) {
+  // 60 items an hour is far more than she'd ever list; a script would hit it fast.
+  if (rateLimited(clientIp(req.headers), 60, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: "Too many items analyzed in the last hour — try again in a bit." }, { status: 429 });
+  }
   try {
     const body = (await req.json()) as { images?: unknown; image?: unknown; description?: unknown; sales?: unknown };
     // Accept the old single-image shape too, so a cached client keeps working.

@@ -60,3 +60,14 @@ describe("price anchor", () => {
     expect(finalPrice(2, 1, 3, a, "Used - Fair").suggested).toBe(2);
   });
 });
+
+describe("rate limit", () => {
+  it("allows up to the limit per window, then blocks, then recovers", async () => {
+    const { rateLimited } = await import("@/lib/rateLimit");
+    const t = 1_000_000;
+    for (let i = 0; i < 3; i++) expect(rateLimited("1.2.3.4", 3, 1000, t + i)).toBe(false);
+    expect(rateLimited("1.2.3.4", 3, 1000, t + 10)).toBe(true);
+    expect(rateLimited("5.6.7.8", 3, 1000, t + 10)).toBe(false);
+    expect(rateLimited("1.2.3.4", 3, 1000, t + 2000)).toBe(false);
+  });
+});

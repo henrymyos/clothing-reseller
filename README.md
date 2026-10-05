@@ -65,4 +65,15 @@ stock, and the data imports. `/inventory` redirects to `/shop`.
 `src/lib/model.ts` tries Claude Haiku, then free-tier fallbacks. On the AI Gateway's free tier
 Claude isn't available, so calls run on Gemini Flash Lite; refused models are remembered for
 15 minutes, rate limits get one quick retry, and every call has a time limit so a stuck
-request can't exceed the 60s function limit.
+request can't exceed the 60s function limit. Any other model failure (retired model, provider
+outage) also falls through to the next model (Gemini 2.5 Flash Lite → GPT-5 nano → Gemini 3.1
+Flash Lite).
+
+## Staying up
+
+- `/api/health` checks the AI models, Exa's Depop search and Depop's listing format; it answers
+  503 with details if any fail. The project-hub uptime workflow checks it hourly (cached 12h on
+  the CDN, so about two real checks a day) and opens a GitHub issue on failure.
+- `/api/analyze` is limited to 60 items per IP per hour so a bot can't drain the free credits.
+- On iPhone, Safari clears site data after 7 days without a visit; My shop asks her to add
+  SnapList to the Home Screen (manifest in `src/app/manifest.ts`), which keeps it.

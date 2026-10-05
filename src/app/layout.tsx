@@ -22,6 +22,7 @@ export const metadata: Metadata = {
   title: "SnapList — @soldbychica",
   description:
     "Photograph a clothing item and get a ready-to-post Depop listing: description, measurements, condition, tags, a price from matching Depop listings, and your take-home profit.",
+  appleWebApp: { capable: true, title: "SnapList", statusBarStyle: "default" },
 };
 
 export default function RootLayout({

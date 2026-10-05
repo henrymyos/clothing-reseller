@@ -5,21 +5,27 @@ export const PRIMARY_MODEL = "anthropic/claude-haiku-4-5";
 // Multimodal models available on the gateway's free tier, tried in order when a model
 // is rejected as tier-restricted or rate-limited (e.g. no paid credits on the team).
 // Different providers so one model's free-tier rate limit doesn't sink the whole chain.
-export const FALLBACK_MODELS = ["google/gemini-2.5-flash-lite", "openai/gpt-5-nano"];
+// Several, so a retired model or one provider's outage can't take the app down.
+export const FALLBACK_MODELS = ["google/gemini-2.5-flash-lite", "openai/gpt-5-nano", "google/gemini-3.1-flash-lite"];
 
 // A model the gateway refused for the billing tier stays refused for a while —
 // remember that so every call doesn't spend a round trip rediscovering it.
 // Rate limits are temporary, so those are only skipped briefly.
 const TIER_SKIP_MS = 15 * 60 * 1000;
 const RATE_SKIP_MS = 20 * 1000;
+const DOWN_SKIP_MS = 5 * 60 * 1000;
 const skipUntil = new Map<string, number>();
 
-function issueKind(e: unknown): "tier" | "rate" | "slow" | null {
+// Why a model call failed. Anything that isn't about the request itself (a bad
+// image, an invalid schema) counts as the model being down — retired, provider
+// outage, out of credits — so the next model gets a turn.
+function issueKind(e: unknown): "tier" | "rate" | "slow" | "down" | null {
   if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return "slow";
   const msg = e instanceof Error ? e.message : String(e);
-  if (/rate.?limit/i.test(msg)) return "rate";
-  if (/free tier|no_providers_available/i.test(msg)) return "tier";
-  return null;
+  if (/rate.?limit|too many requests|\b429\b/i.test(msg)) return "rate";
+  if (/free tier|no_providers_available|credit|insufficient|quota|payment|billing/i.test(msg)) return "tier";
+  if (/invalid.*image|image.*(too large|invalid|unsupported)|payload too large|\b413\b/i.test(msg)) return null;
+  return "down";
 }
 
 /**
@@ -54,8 +60,8 @@ export async function withModelFallback<T>(
       const kind = issueKind(e);
       if (!kind) throw e;
       lastError = e;
-      skipUntil.set(model, Date.now() + (kind === "tier" ? TIER_SKIP_MS : RATE_SKIP_MS));
-      const why = kind === "tier" ? "unavailable on this AI Gateway tier" : kind === "rate" ? "rate-limited" : "timed out";
+      skipUntil.set(model, Date.now() + (kind === "tier" ? TIER_SKIP_MS : kind === "down" ? DOWN_SKIP_MS : RATE_SKIP_MS));
+      const why = kind === "tier" ? "unavailable on this AI Gateway tier" : kind === "rate" ? "rate-limited" : kind === "down" ? `failed (${e instanceof Error ? e.message.slice(0, 120) : "error"})` : "timed out";
       console.warn(`${model} ${why} (${Date.now() - t}ms), trying next fallback`);
     }
   }

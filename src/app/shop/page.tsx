@@ -6,7 +6,7 @@ import { importSalesCsv, type Sale } from "@/lib/sales";
 import { readSales, saveSales, type SalesStore } from "@/lib/salesStore";
 import { normSize, recommend, type Rec } from "@/lib/recommend";
 import { DEFAULT_FEES } from "@/lib/depop";
-import { readInventory, readShopSettings, saveInventory, saveShopSettings, type InventoryStore, type ShopSettings } from "@/lib/inventoryStore";
+import { isIosBrowserTab, readInventory, readShopSettings, requestPersistentStorage, saveInventory, saveShopSettings, type InventoryStore, type ShopSettings } from "@/lib/inventoryStore";
 import { Card, Label, input } from "@/components/ui";
 
 const usd = (n: number | null | undefined, digits = 2) =>
@@ -22,12 +22,13 @@ export default function Shop() {
   const [settings, setSettings] = useState<ShopSettings>({ assumeBoosted: true, staleDays: 30 });
   const [sales, setSales] = useState<SalesStore | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [iosTab, setIosTab] = useState(false);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setStore(readInventory()); setSales(readSales()); setSettings(readShopSettings()); setLoaded(true); }, []);
+  useEffect(() => { setStore(readInventory()); setSales(readSales()); setSettings(readShopSettings()); setIosTab(isIosBrowserTab()); setLoaded(true); }, []);
 
-  function save(v: InventoryStore | null) { setStore(v); saveInventory(v); }
-  function saveOrders(v: SalesStore | null) { setSales(v); saveSales(v); }
+  function save(v: InventoryStore | null) { setStore(v); saveInventory(v); if (v) requestPersistentStorage(); }
+  function saveOrders(v: SalesStore | null) { setSales(v); saveSales(v); if (v) requestPersistentStorage(); }
   function updateSettings(v: ShopSettings) { setSettings(v); saveShopSettings(v); }
 
   const report = useMemo(
@@ -53,6 +54,13 @@ export default function Shop() {
             </div>
           )}
         </header>
+
+        {iosTab && (store || sales) && (
+          <div className="mb-5 rounded-2xl border border-honey/40 bg-honey-soft p-4 text-sm text-ink-soft">
+            <p className="font-semibold text-honey">Keep your data: add SnapList to your Home Screen</p>
+            <p className="mt-1">Safari clears saved website data after 7 days without a visit. Tap Share <span aria-hidden>⬆︎</span> → <b>Add to Home Screen</b>, open SnapList from there and load your sheet and sales once more — the Home Screen app keeps its own copy, and keeps it.</p>
+          </div>
+        )}
 
         {loaded && !store && !sales && (
           <div className="mb-5 rounded-2xl border border-cherry/25 bg-blush p-5 text-sm text-ink-soft">

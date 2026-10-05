@@ -32,3 +32,18 @@ export function readShopSettings(): ShopSettings {
 export function saveShopSettings(v: ShopSettings) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(v)); } catch { /* ignore */ }
 }
+
+// Ask the browser to keep this site's storage instead of clearing it under
+// pressure or after inactivity. Browsers may say no; it never hurts to ask.
+export function requestPersistentStorage() {
+  try { void navigator.storage?.persist?.(); } catch { /* not supported */ }
+}
+
+// iPhone/iPad Safari that isn't running from the home screen — the case where
+// saved data is wiped after 7 days without a visit.
+export function isIosBrowserTab(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = (navigator as Navigator & { standalone?: boolean }).standalone === true || matchMedia("(display-mode: standalone)").matches;
+  return ios && !standalone;
+}
