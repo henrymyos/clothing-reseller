@@ -14,6 +14,7 @@ import { Card, Label, input } from "@/components/ui";
 import { inventoryToSales, nextSku, sheetRow, type InvItem } from "@/lib/inventory";
 import { readInventory } from "@/lib/inventoryStore";
 import { readSales, type SalesStore } from "@/lib/salesStore";
+import { clearedMessage, whatWasCleared } from "@/lib/savedFlag";
 
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
@@ -48,9 +49,17 @@ export default function Home() {
   const [inventory, setInventory] = useState<InvItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [cleared, setCleared] = useState<string | null>(null);
+
   // Her Depop sales and inventory sheet live only in this browser; they're loaded on My shop.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setSales(readSales()); setInventory(readInventory()?.items ?? []); }, []);
+  // If the browser wiped them, say so — prices would otherwise quietly stop using her sales.
+  useEffect(() => {
+    const orders = readSales(), inv = readInventory();
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setSales(orders); setInventory(inv?.items ?? []);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    void whatWasCleared({ inventory: !!inv, sales: !!orders }).then((c) => setCleared(clearedMessage(c)));
+  }, []);
   // Without a Depop sales export, the sold items in her inventory sheet price new listings.
   const pricingSales = sales?.sales ?? (inventory.length ? inventoryToSales(inventory) : undefined);
   async function addFiles(files: FileList) {
@@ -105,6 +114,12 @@ export default function Home() {
           <p className="mt-1 text-xs text-muted">
             {pricingSales ? `Pricing from ${pricingSales.length} of your past sales.` : <>Load your sheet on <Link href="/shop" className="font-semibold text-cherry hover:underline">My shop</Link> so prices use your own sales.</>}
           </p>
+          {cleared && (
+            <div role="status" className="mt-3 rounded-2xl border border-honey/40 bg-honey-soft p-3 text-sm text-ink-soft">
+              <p className="font-semibold text-honey">⚠️ Your saved data is gone</p>
+              <p className="mt-0.5">{cleared}</p>
+            </div>
+          )}
         </header>
 
         {/* Photos + notes */}
@@ -194,6 +209,9 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
 
   return (
     <div className="mt-6 space-y-4">
+      {/* Anything SnapList had to work around — never applied silently. */}
+      {!!result.notices?.length && <Notices items={result.notices} />}
+
       {/* Price */}
       <Card>
         <Label>Price</Label>
@@ -223,8 +241,10 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
           <p className="mt-2 inline-block rounded-full bg-sage-soft px-2.5 py-0.5 text-xs font-semibold text-sage">
             ✓ {result.priceBasis === "comps" ? "Based on" : "Checked against"} {result.comps.sampleSize} matching Depop listings (median ${result.comps.median})
           </p>
+        ) : result.priceBasis === "mine" || result.priceBasis === "family" ? (
+          <p className="mt-2 text-xs text-muted">No close Depop listings to compare against, so this comes from your own sales.</p>
         ) : (
-          <p className="mt-2 text-xs text-muted">Estimate from the photos — not enough close Depop matches to ground it. Check Depop before pricing.</p>
+          <p className="mt-2 text-xs text-muted">Estimate from the photos — nothing of yours or on Depop close enough to ground it. Check Depop before pricing.</p>
         )}
       </Card>
 
@@ -383,6 +403,18 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
       <p className="text-center text-xs text-muted">
         Confidence: {result.confidence} · read from {result.photoCount} photo{result.photoCount === 1 ? "" : "s"} · prices are estimates.
       </p>
+    </div>
+  );
+}
+
+// A clear heads-up when something didn't work the usual way.
+function Notices({ items }: { items: string[] }) {
+  return (
+    <div role="status" className="rounded-2xl border border-honey/40 bg-honey-soft p-4 text-sm">
+      <p className="font-semibold text-honey">⚠️ Heads up</p>
+      <ul className={`mt-1 space-y-1 text-ink-soft ${items.length > 1 ? "list-disc pl-5" : ""}`}>
+        {items.map((n) => <li key={n}>{n}</li>)}
+      </ul>
     </div>
   );
 }

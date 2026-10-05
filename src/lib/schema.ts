@@ -91,5 +91,6 @@ export type AnalyzeResponse = Analysis & {
   comps: Comps | null;
   mySales: import("@/lib/sales").MySales | null;
   priceBasis?: import("@/lib/pricing").PriceBasis; // what the price is anchored on
+  notices?: string[]; // anything SnapList had to work around (backup model, search down…), shown to her
   photoCount: number;
 };

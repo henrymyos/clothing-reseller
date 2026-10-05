@@ -75,5 +75,11 @@ Flash Lite).
   503 with details if any fail. The project-hub uptime workflow checks it hourly (cached 12h on
   the CDN, so about two real checks a day) and opens a GitHub issue on failure.
 - `/api/analyze` is limited to 60 items per IP per hour so a bot can't drain the free credits.
+- Nothing degrades silently (`src/lib/notices.ts`): a "Heads up" box on the listing says when a
+  backup AI model wrote it, when the Depop search failed or Depop's pages couldn't be read (and
+  what the price fell back to), or when the AI price check was skipped; whole-analysis failures
+  explain themselves (out of credits, busy, not responding). If the browser wipes her saved
+  sheet/sales, both pages say so — `/api/remember` keeps a server-set cookie recording that
+  data was loaded (never the data), which Safari's 7-day cleanup doesn't touch.
 - On iPhone, Safari clears site data after 7 days without a visit; My shop asks her to add
   SnapList to the Home Screen (manifest in `src/app/manifest.ts`), which keeps it.

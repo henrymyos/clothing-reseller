@@ -7,6 +7,9 @@ export const PRIMARY_MODEL = "anthropic/claude-haiku-4-5";
 // Different providers so one model's free-tier rate limit doesn't sink the whole chain.
 // Several, so a retired model or one provider's outage can't take the app down.
 export const FALLBACK_MODELS = ["google/gemini-2.5-flash-lite", "openai/gpt-5-nano", "google/gemini-3.1-flash-lite"];
+// What normally runs: Claude when there are paid credits, else Gemini Flash Lite on
+// the free tier. Anything past these is a backup, and the app says so.
+export const USUAL_MODELS = [PRIMARY_MODEL, FALLBACK_MODELS[0]];
 
 // A model the gateway refused for the billing tier stays refused for a while —
 // remember that so every call doesn't spend a round trip rediscovering it.
@@ -19,7 +22,7 @@ const skipUntil = new Map<string, number>();
 // Why a model call failed. Anything that isn't about the request itself (a bad
 // image, an invalid schema) counts as the model being down — retired, provider
 // outage, out of credits — so the next model gets a turn.
-function issueKind(e: unknown): "tier" | "rate" | "slow" | "down" | null {
+export function issueKind(e: unknown): "tier" | "rate" | "slow" | "down" | null {
   if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return "slow";
   const msg = e instanceof Error ? e.message : String(e);
   if (/rate.?limit|too many requests|\b429\b/i.test(msg)) return "rate";
@@ -36,7 +39,7 @@ function issueKind(e: unknown): "tier" | "rate" | "slow" | "down" | null {
  */
 export async function withModelFallback<T>(
   run: (model: string, abortSignal: AbortSignal) => Promise<T>,
-  { timeoutMs = 25_000, maxAttempts = Infinity }: { timeoutMs?: number; maxAttempts?: number } = {}
+  { timeoutMs = 25_000, maxAttempts = Infinity, onModel }: { timeoutMs?: number; maxAttempts?: number; onModel?: (model: string) => void } = {}
 ): Promise<T> {
   const chain = [PRIMARY_MODEL, ...FALLBACK_MODELS];
   const now = Date.now();
@@ -55,6 +58,7 @@ export async function withModelFallback<T>(
         out = await run(model, AbortSignal.timeout(timeoutMs));
       }
       console.log(`model ${model} ok in ${Date.now() - t}ms`);
+      onModel?.(model);
       return out;
     } catch (e) {
       const kind = issueKind(e);

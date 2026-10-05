@@ -5,6 +5,7 @@ import { analyzeInventory, importInventory, reportCsv, type ItemCalc, type Repor
 import { importSalesCsv, type Sale } from "@/lib/sales";
 import { readSales, saveSales, type SalesStore } from "@/lib/salesStore";
 import { normSize, recommend, type Rec } from "@/lib/recommend";
+import { clearedMessage, rememberSaved, whatWasCleared } from "@/lib/savedFlag";
 import { DEFAULT_FEES } from "@/lib/depop";
 import { isIosBrowserTab, readInventory, readShopSettings, requestPersistentStorage, saveInventory, saveShopSettings, type InventoryStore, type ShopSettings } from "@/lib/inventoryStore";
 import { Card, Label, input } from "@/components/ui";
@@ -23,12 +24,26 @@ export default function Shop() {
   const [sales, setSales] = useState<SalesStore | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [iosTab, setIosTab] = useState(false);
+  const [cleared, setCleared] = useState<string | null>(null);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setStore(readInventory()); setSales(readSales()); setSettings(readShopSettings()); setIosTab(isIosBrowserTab()); setLoaded(true); }, []);
+  useEffect(() => {
+    const inv = readInventory(), orders = readSales();
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setStore(inv); setSales(orders); setSettings(readShopSettings()); setIosTab(isIosBrowserTab()); setLoaded(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    // If the browser wiped data she'd loaded, say so; otherwise keep the record in sync.
+    const now = { inventory: !!inv, sales: !!orders };
+    void whatWasCleared(now).then((c) => { const msg = clearedMessage(c); if (msg) setCleared(msg); else rememberSaved(now); });
+  }, []);
 
-  function save(v: InventoryStore | null) { setStore(v); saveInventory(v); if (v) requestPersistentStorage(); }
-  function saveOrders(v: SalesStore | null) { setSales(v); saveSales(v); if (v) requestPersistentStorage(); }
+  function save(v: InventoryStore | null) {
+    setStore(v); saveInventory(v); if (v) requestPersistentStorage();
+    rememberSaved({ inventory: !!v, sales: !!sales }); setCleared(null);
+  }
+  function saveOrders(v: SalesStore | null) {
+    setSales(v); saveSales(v); if (v) requestPersistentStorage();
+    rememberSaved({ inventory: !!store, sales: !!v }); setCleared(null);
+  }
   function updateSettings(v: ShopSettings) { setSettings(v); saveShopSettings(v); }
 
   const report = useMemo(
@@ -54,6 +69,13 @@ export default function Shop() {
             </div>
           )}
         </header>
+
+        {cleared && (
+          <div role="status" className="mb-5 rounded-2xl border border-honey/40 bg-honey-soft p-4 text-sm text-ink-soft">
+            <p className="font-semibold text-honey">⚠️ Your saved data is gone</p>
+            <p className="mt-1">{cleared}</p>
+          </div>
+        )}
 
         {iosTab && (store || sales) && (
           <div className="mb-5 rounded-2xl border border-honey/40 bg-honey-soft p-4 text-sm text-ink-soft">

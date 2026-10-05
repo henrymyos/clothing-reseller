@@ -215,9 +215,24 @@ export function selectComps(
   };
 }
 
-export async function getDepopComps(a: Analysis): Promise<Comps | null> {
+// How the Depop search went, so the app can say so instead of quietly pricing
+// without it.
+export type SearchStatus =
+  | { state: "ok" }
+  | { state: "no-matches" }          // searched fine, nothing close enough
+  | { state: "failed"; detail: string } // the search service errored or isn't set up
+  | { state: "unreadable" };          // found listings but couldn't read them — Depop changed its pages?
+
+export function searchStatus(o: { hasKey: boolean; errors: string[]; queries: number; results: number; parsed: number; kept: boolean }): SearchStatus {
+  if (!o.hasKey) return { state: "failed", detail: "the search key is missing" };
+  if (o.queries > 0 && o.errors.length === o.queries) return { state: "failed", detail: o.errors[0] };
+  if (o.results >= 3 && o.parsed === 0) return { state: "unreadable" };
+  return o.kept ? { state: "ok" } : { state: "no-matches" };
+}
+
+export async function getDepopComps(a: Analysis): Promise<{ comps: Comps | null; search: SearchStatus }> {
   const apiKey = process.env.EXA_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return { comps: null, search: searchStatus({ hasKey: false, errors: [], queries: 0, results: 0, parsed: 0, kept: false }) };
   const exa = new Exa(apiKey);
   // Exact, broader, and brand + type as a safety net (the model's queries vary run to run).
   const brandType = /^(unknown|unbranded)$/i.test(a.brand.trim()) ? "" : `${a.brand} ${a.itemType}`;
@@ -226,9 +241,10 @@ export async function getDepopComps(a: Analysis): Promise<Comps | null> {
     queries.map((q) => exa.search(q, { numResults: 25, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } } }))
   );
   const parsed: ParsedListing[] = [];
+  const errors: string[] = [];
   let results = 0;
   for (const s of settled) {
-    if (s.status !== "fulfilled") continue;
+    if (s.status !== "fulfilled") { errors.push(s.reason instanceof Error ? s.reason.message.slice(0, 160) : "search failed"); continue; }
     for (const r of s.value.results ?? []) {
       if (!/depop\.com\/products\//.test(r.url)) continue;
       results += 1;
@@ -237,6 +253,7 @@ export async function getDepopComps(a: Analysis): Promise<Comps | null> {
     }
   }
   const comps = selectComps(a, parsed, queries[0]);
-  console.log(`comps: ${queries.length} queries, ${results} results, ${parsed.length} parsed (USD), ${comps ? comps.sampleSize : 0} kept`);
-  return comps;
+  const search = searchStatus({ hasKey: true, errors, queries: queries.length, results, parsed: parsed.length, kept: !!comps });
+  console.log(`comps: ${queries.length} queries (${errors.length} failed), ${results} results, ${parsed.length} parsed (USD), ${comps ? comps.sampleSize : 0} kept → ${search.state}`);
+  return { comps, search };
 }

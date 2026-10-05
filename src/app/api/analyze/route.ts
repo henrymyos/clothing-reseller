@@ -1,12 +1,13 @@
 import { generateObject } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schema";
-import { getDepopComps } from "@/lib/comps";
+import { getDepopComps, type SearchStatus } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
 import { clientIp, rateLimited } from "@/lib/rateLimit";
 import { MAX_HASHTAGS, cleanHashtag, enrichHeadline } from "@/lib/depop";
 import { cleanSales, matchMySales } from "@/lib/sales";
 import { explainPrice, finalPrice, priceAnchor, type PriceBasis } from "@/lib/pricing";
+import { PRICE_CHECK_SKIPPED, friendlyError, modelNotice, searchNotice } from "@/lib/notices";
 
 export const maxDuration = 60;
 
@@ -41,6 +42,11 @@ export async function POST(req: NextRequest) {
     }
     const sellerNotes = typeof body.description === "string" ? body.description.trim().slice(0, 500) : "";
 
+    // Anything worked around along the way is reported back, never applied silently.
+    const notices: string[] = [];
+    const modelsUsed: string[] = [];
+    const onModel = (m: string) => { modelsUsed.push(m); };
+
     // 1. Read the item from every photo.
     const { object: analysis } = await withModelFallback((model, abortSignal) =>
       generateObject({
@@ -65,7 +71,8 @@ export async function POST(req: NextRequest) {
             ],
           },
         ],
-      })
+      }),
+      { onModel }
     );
     analysis.hashtags = [...new Set(analysis.hashtags.map(cleanHashtag).filter(Boolean))].slice(0, MAX_HASHTAGS);
     analysis.headline = enrichHeadline(analysis.headline, [...analysis.styles, ...analysis.hashtags, analysis.age === "Modern" ? "" : "vintage"], analysis.colors[0]);
@@ -76,18 +83,22 @@ export async function POST(req: NextRequest) {
       analysis.sizeSource = "unknown";
     }
 
-    // 2. Matched Depop comps (non-fatal if the search fails).
+    // 2. Matched Depop comps (non-fatal if the search fails — but she's told).
     let comps: AnalyzeResponse["comps"] = null;
+    let search: SearchStatus;
     try {
-      comps = await getDepopComps(analysis);
+      ({ comps, search } = await getDepopComps(analysis));
     } catch (e) {
       console.error("Depop comps lookup failed:", e);
+      search = { state: "failed", detail: e instanceof Error ? e.message.slice(0, 160) : "search error" };
     }
 
     // 3. The seller's own sold items like this one (her real sold prices).
     const sales = cleanSales(body.sales);
     const mySales = sales.length ? matchMySales(analysis, sales) : null;
     const hasMine = !!mySales && (mySales.matches.length > 0 || mySales.familyMedian != null);
+    const searchMsg = searchNotice(search, hasMine);
+    if (searchMsg) notices.push(searchMsg);
 
     // 4. Re-price on her sales + the matched Depop listings.
     let priceBasis: PriceBasis = "photos";
@@ -121,7 +132,7 @@ ${mineBlock}
 ${compsBlock}
 Return the final range and suggested price in USD, citing her sales when they exist.`,
           }),
-          { timeoutMs: 12_000 }
+          { timeoutMs: 12_000, onModel }
         );
         const a = priceAnchor(mySales, comps);
         const p = finalPrice(pricing.suggestedPrice, pricing.priceLow, pricing.priceHigh, a, analysis.condition);
@@ -134,15 +145,26 @@ Return the final range and suggested price in USD, citing her sales when they ex
         // the final price and range shown.
         analysis.priceReasoning = explainPrice(mySales, comps, analysis.visibleFlaws, analysis.condition);
       } catch (e) {
-        console.error("Re-pricing failed, keeping the photo estimate:", e);
+        // The AI check failed: still hold the photo estimate to her sales and the
+        // listings (same floor, cap and range), and say that's what happened.
+        console.error("Re-pricing failed, anchoring the photo estimate directly:", e);
+        const a = priceAnchor(mySales, comps);
+        const p = finalPrice(analysis.suggestedPrice, analysis.priceLow, analysis.priceHigh, a, analysis.condition);
+        analysis.suggestedPrice = p.suggested;
+        analysis.priceLow = p.low;
+        analysis.priceHigh = p.high;
+        priceBasis = a.basis;
+        analysis.priceReasoning = explainPrice(mySales, comps, analysis.visibleFlaws, analysis.condition);
+        notices.push(PRICE_CHECK_SKIPPED);
       }
     }
 
-    const response: AnalyzeResponse = { ...analysis, comps, mySales: hasMine ? mySales : null, priceBasis, photoCount: images.length };
+    const modelMsg = modelNotice(modelsUsed);
+    if (modelMsg) notices.unshift(modelMsg);
+    const response: AnalyzeResponse = { ...analysis, comps, mySales: hasMine ? mySales : null, priceBasis, notices, photoCount: images.length };
     return NextResponse.json(response);
   } catch (err) {
     console.error("Analyze error:", err);
-    const message = err instanceof Error ? err.message : "Something went wrong analyzing the photos.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: friendlyError(err) }, { status: 500 });
   }
 }
