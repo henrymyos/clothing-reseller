@@ -5,9 +5,9 @@ import Link from "next/link";
 import type { AnalyzeResponse, Comps } from "@/lib/schema";
 import type { MySales } from "@/lib/sales";
 import {
-  AGES, COLORS, CONDITIONS, DEFAULT_FEES, DEPARTMENTS, MAX_COLORS, MAX_DESCRIPTION, MAX_HASHTAGS,
+  AGES, COLORS, CONDITIONS, DEFAULT_FEES, DEPARTMENTS, HASHTAG_BANK, MAX_COLORS, MAX_DESCRIPTION, MAX_HASHTAGS,
   MAX_STYLES, MEASUREMENT_FIELDS, MEASUREMENT_KINDS, SOURCES, STYLES,
-  buildDescription, cleanHashtag, formatWeight, profit, shippedWeightOz,
+  buildDescription, formatWeight, profit, shippedWeightOz,
   type Condition, type MeasurementKind,
 } from "@/lib/depop";
 import { Card, Label, input } from "@/components/ui";
@@ -261,16 +261,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
           <textarea value={draft.headline} onChange={(e) => set("headline", e.target.value.replace(/\n/g, " "))} rows={2} className={`${input} resize-none`} />
         </Field>
         <p className="mt-1 text-xs text-muted">Written like your listings, with extra words buyers search for. Brand, condition and material go in Depop&apos;s own fields below.</p>
-        <Field label="SKU">
-          <input value={draft.sku} onChange={(e) => set("sku", e.target.value)} placeholder="e.g. 0190" className={input} />
-        </Field>
-        <Field label={`Hashtags (up to ${MAX_HASHTAGS}, comma-separated)`}>
-          <input
-            value={draft.hashtags.join(", ")}
-            onChange={(e) => set("hashtags", e.target.value.split(/[,\s]+/).map(cleanHashtag).filter(Boolean).slice(0, MAX_HASHTAGS))}
-            className={input}
-          />
-        </Field>
+        <Chips label={`Hashtags — ${draft.hashtags.length} of ${MAX_HASHTAGS} from your word bank (tap to swap)`} options={HASHTAG_BANK} value={draft.hashtags} max={MAX_HASHTAGS} onChange={(v) => set("hashtags", v)} />
         <p className="mt-3 text-xs font-medium text-muted">Preview</p>
         <pre className="mt-1 whitespace-pre-wrap rounded-xl bg-cream p-3 font-sans text-sm text-ink-soft">{description}</pre>
         <p className={`mt-1 text-right text-xs ${description.length > MAX_DESCRIPTION ? "text-cherry" : "text-muted"}`}>
@@ -392,8 +383,9 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
         </details>
         <div className="mt-4 rounded-xl border border-line p-3 text-sm">
           <p className="font-medium">Add to your inventory sheet</p>
-          <p className="mt-0.5 text-xs text-muted">Copies a row{draft.sku ? ` (SKU ${draft.sku})` : ""} — click the first empty cell in the SOLD? column of your sheet and paste.</p>
+          <p className="mt-0.5 text-xs text-muted">Copies a row — click the first empty cell in the SOLD? column of your sheet and paste.</p>
           <div className="mt-2 flex gap-2">
+            <input value={draft.sku} onChange={(e) => set("sku", e.target.value)} placeholder="SKU" className={`${input.replace("w-full ", "")} w-20 shrink-0`} aria-label="SKU" />
             <input value={sheetName} onChange={(e) => setSheetName(e.target.value)} className={input} aria-label="Name for your sheet" />
             <CopyButton primary label="Copy row" text={sheetRow({ sku: draft.sku, name: sheetName, cost, listPrice: draft.price, date: new Date() })} />
           </div>

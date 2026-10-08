@@ -68,6 +68,42 @@ export const MEASUREMENT_FIELDS: Record<MeasurementKind, { key: string; label: s
 };
 
 export const MAX_HASHTAGS = 5;          // Depop allows up to 5 hashtags in a description
+
+// Her hashtag word bank — every listing's 5 hashtags come from this list.
+export const HASHTAG_BANK = [
+  "cottage", "cottagecore", "normcore", "gorpcore", "casual", "indie", "skater", "surfer", "grunge",
+  "western", "loungewear", "minimalist", "preppy", "academia", "grandma", "workwear", "carpenter",
+  "thermal", "cable", "knit", "vintage", "y2k", "90s", "striped", "retro", "baggy", "heavyweight",
+  "outdoors", "hiking", "winter", "streetwear", "sportswear", "utility", "biker", "emo",
+] as const;
+export type Hashtag = (typeof HASHTAG_BANK)[number];
+const BANK = new Set<string>(HASHTAG_BANK);
+// Near-misses the model (or an old listing) might use, mapped onto the bank.
+const TAG_ALIASES: Record<string, string[]> = {
+  skate: ["skater"], surf: ["surfer"], stripe: ["striped"], stripes: ["striped"], cableknit: ["cable", "knit"],
+  hike: ["hiking"], outdoor: ["outdoors"], sporty: ["sportswear"], nineties: ["90s"], "1990s": ["90s"], darkacademia: ["academia"],
+};
+
+/**
+ * Exactly 5 hashtags from her word bank: the model's picks that are in the bank
+ * first, then words the item itself suggests (its style tags, era, and words in
+ * its title like "thermal" or "striped"), then safe defaults.
+ */
+export function pickHashtags(chosen: string[], hints: { styles?: string[]; age?: string; text?: string } = {}): Hashtag[] {
+  const out: string[] = [];
+  const add = (w: string) => {
+    const k = cleanHashtag(w);
+    for (const t of BANK.has(k) ? [k] : TAG_ALIASES[k] ?? []) if (!out.includes(t) && out.length < MAX_HASHTAGS) out.push(t);
+  };
+  chosen.forEach(add);
+  (hints.styles ?? []).forEach(add);
+  if (hints.age === "90s") add("90s");
+  if (hints.age === "00s") add("y2k");
+  const words = (hints.text ?? "").toLowerCase().split(/[^a-z0-9]+/);
+  for (const w of words) add(w);
+  for (const d of ["casual", "vintage", "indie", "streetwear", "winter"]) add(d);
+  return out.slice(0, MAX_HASHTAGS) as Hashtag[];
+}
 export const MAX_DESCRIPTION = 1000;    // Depop description character limit
 export const MAX_STYLES = 3;
 export const MAX_COLORS = 2;
@@ -100,7 +136,6 @@ export type ListingDraft = {
   measurementKind: MeasurementKind;
   measurements: Record<string, string>;
   hashtags: string[];
-  sku?: string;
 };
 
 // The Depop description, laid out the way @soldbychica writes hers:
@@ -108,8 +143,7 @@ export type ListingDraft = {
 //   size L
 //   small stain on front (pictured)
 //
-//   0190
-//   #indie #skate #surf #thermal #winter
+//   #indie #skater #surfer #thermal #winter
 // The keyword-rich first line does the search work; no pitch, and no brand,
 // condition or material lines (those go in Depop's own fields).
 export function buildDescription(d: ListingDraft): string {
@@ -123,11 +157,8 @@ export function buildDescription(d: ListingDraft): string {
     .map((f) => (d.measurements[f.key]?.trim() ? `${f.label.toLowerCase()} ${formatInches(d.measurements[f.key])}` : ""))
     .filter(Boolean);
   if (meas.length) top.push(`measurements laid flat: ${meas.join(", ")}`);
-  const bottom: string[] = [];
-  if (d.sku?.trim()) bottom.push(d.sku.trim());
   const tags = d.hashtags.map(cleanHashtag).filter(Boolean).slice(0, MAX_HASHTAGS);
-  if (tags.length) bottom.push(tags.map((t) => `#${t}`).join(" "));
-  return [top.join("\n"), bottom.join("\n")].filter(Boolean).join("\n\n");
+  return [top.join("\n"), tags.map((t) => `#${t}`).join(" ")].filter(Boolean).join("\n\n");
 }
 
 export type ProfitInput = {

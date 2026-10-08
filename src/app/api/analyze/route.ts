@@ -4,7 +4,7 @@ import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schem
 import { getDepopComps, type SearchStatus } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
 import { clientIp, rateLimited } from "@/lib/rateLimit";
-import { MAX_HASHTAGS, cleanHashtag, enrichHeadline } from "@/lib/depop";
+import { HASHTAG_BANK, enrichHeadline, pickHashtags } from "@/lib/depop";
 import { cleanSales, matchMySales } from "@/lib/sales";
 import { explainPrice, finalPrice, priceAnchor, type PriceBasis } from "@/lib/pricing";
 import { PRICE_CHECK_SKIPPED, friendlyError, modelNotice, searchNotice } from "@/lib/notices";
@@ -22,9 +22,10 @@ Look at every photo for wear: stains, holes, pilling, fading, cracked prints, st
 Pricing: estimate what this sells for on Depop in the US — realistic sold prices, not retail and not hopeful asking prices. Blank-brand garments (Gildan, Hanes, etc.) are priced on the graphic, not the brand.
 Descriptions follow the seller's own style — a keyword-rich first line, then the size, then any flaws — with 5 one-word hashtags. Real examples from her shop:
 - "Croft & Barrow mocha brown cable knit quarter zip sweater" · #cable #grandma #preppy #cottage #cottagecore
-- "Van Heusen gray skater casual boxy fit quarter zip with black horizontal stripes" · #casual #boxy #indie #stripe #skate
-- "Volcom vintage 2007 dark gray y2k skater concert graphic polo shirt" · #y2k #vintage #skater #grunge #surf
-- "Amazon Essentials black waffle knit thermal long sleeve shirt" · #indie #grunge #skate #waffle #winter
+- "Van Heusen gray skater casual boxy fit quarter zip with black horizontal stripes" · #casual #striped #indie #skater #retro
+- "Volcom vintage 2007 dark gray y2k skater concert graphic polo shirt" · #y2k #vintage #skater #grunge #surfer
+- "Amazon Essentials black waffle knit thermal long sleeve shirt" · #indie #grunge #skater #thermal #winter
+Hashtags come only from her word bank: ${HASHTAG_BANK.join(", ")}. Pick the 5 that best fit the item.
 Write first lines like these, but work in more of the words a buyer would actually search for this exact piece — always at least two style words (indie, skater, surfer, grunge, y2k, vintage, preppy, cottagecore, granola, workwear, casual…) plus fit, era, fabric or item synonyms — while keeping it readable. If the seller's notes describe the item, use them as facts but still write a fuller, keyword-rich first line.`;
 
 export async function POST(req: NextRequest) {
@@ -74,7 +75,11 @@ export async function POST(req: NextRequest) {
       }),
       { onModel }
     );
-    analysis.hashtags = [...new Set(analysis.hashtags.map(cleanHashtag).filter(Boolean))].slice(0, MAX_HASHTAGS);
+    // Always exactly 5, always from her word bank.
+    analysis.hashtags = pickHashtags(analysis.hashtags, {
+      styles: analysis.styles, age: analysis.age,
+      text: `${analysis.headline} ${analysis.itemType} ${analysis.distinctiveFeatures.join(" ")} ${analysis.material}`,
+    });
     analysis.headline = enrichHeadline(analysis.headline, [...analysis.styles, ...analysis.hashtags, analysis.age === "Modern" ? "" : "vintage"], analysis.colors[0]);
     // A size "from the tag" must come with the text actually read off it — a wrong
     // size on a listing means a return, so an unquoted guess becomes "Not visible".

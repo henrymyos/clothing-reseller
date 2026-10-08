@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AGES, COLORS, CONDITIONS, DEPARTMENTS, MEASUREMENT_KINDS, SOURCES, STYLES } from "@/lib/depop";
+import { AGES, COLORS, CONDITIONS, DEPARTMENTS, HASHTAG_BANK, MEASUREMENT_KINDS, SOURCES, STYLES } from "@/lib/depop";
 
 // What the vision model produces from the photos (+ seller notes): everything
 // Depop's Sell form asks for, plus what we need to find comparable listings.
@@ -39,9 +39,9 @@ export const analysisSchema = z.object({
   source: z.enum(SOURCES).describe("Depop source — usually 'Preloved', or 'Vintage' for 20+ year old pieces, 'Deadstock' for unworn old stock."),
   material: z.string().describe("Fabric content from the care tag if visible (e.g. '80% cotton, 20% polyester'), else a best guess prefixed with 'Likely', or 'Unknown'."),
   hashtags: z
-    .array(z.string())
+    .array(z.enum(HASHTAG_BANK))
     .max(5)
-    .describe("Exactly 5 hashtags in the seller's style: single lowercase words buyers search, no '#', mixing style, item and season and not repeating the brand — e.g. 'indie', 'skate', 'surf', 'thermal', 'winter' or 'y2k', 'vintage', 'grunge', 'cottagecore', 'preppy'."),
+    .describe("Exactly 5 different hashtags from the seller's word bank — the 5 that best match this item's style, fabric, pattern, era and season (e.g. a gray waffle thermal: 'thermal', 'indie', 'skater', 'grunge', 'winter'; a cream cable knit sweater: 'cable', 'knit', 'cottagecore', 'grandma', 'preppy')."),
   measurementKind: z.enum(MEASUREMENT_KINDS).describe("Which measurements apply: top, bottoms, shorts, dress, skirt, shoes, accessory."),
   estimatedWeightOz: z.number().describe("Item weight in ounces (without packaging), e.g. tee ~6, hoodie ~20, jeans ~22, heavy jacket ~45."),
   searchQuery: z

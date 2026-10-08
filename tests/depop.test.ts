@@ -1,22 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { buildDescription, cleanHashtag, enrichHeadline, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
+import { HASHTAG_BANK, buildDescription, cleanHashtag, enrichHeadline, pickHashtags, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
 
 const draft = (over: Partial<ListingDraft> = {}): ListingDraft => ({
   headline: "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining",
-  size: "XL", sku: "0190",
+  size: "XL",
   flaws: ["small mark on left cuff"], measurementKind: "top",
   measurements: { pit: "26", length: "28", sleeve: "" }, hashtags: ["#Carhartt", "workwear", "vintage jacket"],
   ...over,
 });
 
 describe("buildDescription", () => {
-  it("lays it out like her listings: first line, size, flaws, then SKU and hashtags", () => {
+  it("lays it out like her listings: first line, size, flaws, then hashtags — no SKU", () => {
     expect(buildDescription(draft())).toBe(
       "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining\n" +
       "size XL\n" +
       "small mark on left cuff (pictured)\n" +
       'measurements laid flat: pit to pit 26", length 28"\n\n' +
-      "0190\n" +
       "#carhartt #workwear #vintagejacket",
     );
   });
@@ -26,8 +25,8 @@ describe("buildDescription", () => {
     expect(d).not.toMatch(/Brand:|Condition:|Material:|Used - /);
   });
 
-  it("handles a missing size tag, no flaws, no measurements and no SKU", () => {
-    expect(buildDescription(draft({ size: "Not visible", flaws: ["  "], measurements: {}, sku: "" }))).toBe(
+  it("handles a missing size tag, no flaws and no measurements", () => {
+    expect(buildDescription(draft({ size: "Not visible", flaws: ["  "], measurements: {} }))).toBe(
       "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining\nsize not tagged — check measurements for accuracy\n\n#carhartt #workwear #vintagejacket",
     );
   });
@@ -105,5 +104,21 @@ describe("enrichHeadline", () => {
   });
   it("ignores tags that aren't style words", () => {
     expect(enrichHeadline("Plain white tee", ["tee", "cotton"], "White")).toBe("Plain white tee");
+  });
+});
+
+describe("pickHashtags", () => {
+  it("always returns exactly 5, all from her word bank", () => {
+    const tags = pickHashtags(["skate", "surf", "waffle", "boxy", "Thermal", "indie", "grunge"]);
+    expect(tags).toEqual(["skater", "surfer", "thermal", "indie", "grunge"]);
+    expect(tags.every((t) => (HASHTAG_BANK as readonly string[]).includes(t))).toBe(true);
+  });
+  it("fills from the item's own styles, era and title when the model gives too few", () => {
+    expect(pickHashtags(["cableknit"], { styles: ["Preppy"], age: "90s", text: "cream striped cable knit sweater" }))
+      .toEqual(["cable", "knit", "preppy", "90s", "striped"]);
+  });
+  it("falls back to safe defaults rather than fewer than 5", () => {
+    expect(pickHashtags([])).toEqual(["casual", "vintage", "indie", "streetwear", "winter"]);
+    expect(new Set(pickHashtags(["casual", "casual", "casual"])).size).toBe(5);
   });
 });
