@@ -41,7 +41,7 @@ export const analysisSchema = z.object({
   keywords: z
     .array(z.enum(HASHTAG_BANK))
     .max(12)
-    .describe("EVERY word from the seller's word bank that genuinely fits this item — style, fabric, knit/pattern, fit, era, season — ranked best first, no repeats. The top 5 become the hashtags; the rest go in the description as search words, so include all that fit (usually 5–10), not just 5. E.g. a cream cable knit sweater: 'cable', 'knit', 'cottagecore', 'grandma', 'preppy', 'chunky', 'cottage', 'winter'."),
+    .describe("EVERY word from the seller's word bank that genuinely fits this item — style, fabric, knit/pattern, fit, era, season — ranked best first, no repeats. The top 5 become the hashtags; the rest are added to the first line as search words, so include all that fit (usually 5–10), not just 5. E.g. a cream cable knit sweater: 'cable', 'knit', 'cottagecore', 'grandma', 'preppy', 'chunky', 'cottage', 'winter'."),
   measurementKind: z.enum(MEASUREMENT_KINDS).describe("Which measurements apply: top, bottoms, shorts, dress, skirt, shoes, accessory."),
   estimatedWeightOz: z.number().describe("Item weight in ounces (without packaging), e.g. tee ~6, hoodie ~20, jeans ~22, heavy jacket ~45."),
   searchQuery: z
@@ -88,7 +88,7 @@ export type Comps = {
 };
 
 export type AnalyzeResponse = Analysis & {
-  hashtags: string[]; // the top 5 keywords; keywords not hashtagged go after the size line
+  hashtags: string[]; // the top 5 keywords; keywords not hashtagged are added to the headline
   comps: Comps | null;
   mySales: import("@/lib/sales").MySales | null;
   priceBasis?: import("@/lib/pricing").PriceBasis; // what the price is anchored on

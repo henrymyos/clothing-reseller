@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { HASHTAG_BANK, buildDescription, cleanHashtag, enrichHeadline, overflowKeywords, pickHashtags, rankKeywords, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
+import { HASHTAG_BANK, buildDescription, cleanHashtag, enrichHeadline, insertKeywords, overflowKeywords, pickHashtags, rankKeywords, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
 
 const draft = (over: Partial<ListingDraft> = {}): ListingDraft => ({
   headline: "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining",
@@ -130,17 +130,16 @@ describe("SEO keywords (every fitting bank word lands in the description)", () =
     model: ["cable", "knit", "cottagecore", "grandma", "preppy", "chunky", "cozy", "winter"],
     hints: { styles: ["Cottagecore", "Preppy"], age: "Modern", text: "Croft & Barrow cream cottagecore cable knit sweater" },
   };
-  const rankedSweater = () => rankKeywords(sweater.model, sweater.hints);
-  const sweaterDraft = (): ListingDraft => {
-    const keywords = rankedSweater();
-    return {
-      headline: "Croft & Barrow cream cottagecore preppy cable knit sweater", size: "L", flaws: ["light pilling on sleeve"],
-      measurementKind: "top", measurements: {}, hashtags: pickHashtags(keywords, sweater.hints), keywords,
-    };
+  const headline = "Croft & Barrow cream cottagecore preppy cable knit sweater";
+  // What the analyze route does after the model returns.
+  const listing = (h = headline) => {
+    const keywords = rankKeywords(sweater.model, sweater.hints);
+    const hashtags: string[] = pickHashtags(keywords, sweater.hints);
+    return { keywords, hashtags, headline: insertKeywords(h, overflowKeywords(keywords, hashtags, h), "Croft & Barrow") };
   };
 
   it("ranks all fitting bank words, model's order first, and drops off-bank words", () => {
-    expect(rankedSweater()).toEqual(["cable", "knit", "cottagecore", "grandma", "preppy", "chunky", "winter"]);
+    expect(listing().keywords).toEqual(["cable", "knit", "cottagecore", "grandma", "preppy", "chunky", "winter"]);
   });
 
   it("always adds words the item itself implies, even if the model misses them", () => {
@@ -149,39 +148,53 @@ describe("SEO keywords (every fitting bank word lands in the description)", () =
     expect(rankKeywords(["preppy"], { text: "navy cardigan" })).toEqual(["preppy", "knit"]);
   });
 
-  it("puts the 6th+ matches right after the size line, before flaws", () => {
-    expect(buildDescription(sweaterDraft())).toBe(
-      "Croft & Barrow cream cottagecore preppy cable knit sweater\n" +
+  it("puts the 6th+ matches into the first line after its style words; no extra line", () => {
+    const l = listing();
+    expect(l.headline).toBe("Croft & Barrow cream cottagecore preppy chunky winter cable knit sweater");
+    expect(buildDescription({ headline: l.headline, size: "L", flaws: ["light pilling on sleeve"], measurementKind: "top", measurements: {}, hashtags: l.hashtags })).toBe(
+      "Croft & Barrow cream cottagecore preppy chunky winter cable knit sweater\n" +
       "size L\n" +
-      "chunky winter\n" +
       "light pilling on sleeve (pictured)\n\n" +
       "#cable #knit #cottagecore #grandma #preppy",
     );
   });
 
-  it("every fitting bank word appears, none twice between hashtags and the keyword line, only bank words", () => {
-    const d = sweaterDraft();
-    const desc = buildDescription(d);
-    const hashtags = (desc.match(/#\w+/g) ?? []).map((t) => t.slice(1));
-    const line = desc.split("\n")[2].split(" ");
-    for (const k of rankedSweater()) expect(hashtags.includes(k) || line.includes(k)).toBe(true);
-    expect(line.filter((w) => hashtags.includes(w))).toEqual([]);
-    expect(new Set(line).size).toBe(line.length);
-    expect([...hashtags, ...line].every((w) => bank.includes(w))).toBe(true);
-    expect(hashtags).toHaveLength(5);
+  it("every fitting bank word appears, no extra duplicates a hashtag, only bank words are added", () => {
+    const l = listing();
+    const first = l.headline.split(" ");
+    const added = first.filter((w) => !headline.split(" ").includes(w));
+    for (const k of l.keywords) expect(l.hashtags.includes(k) || first.includes(k)).toBe(true);
+    expect(added.filter((w) => l.hashtags.includes(w))).toEqual([]);
+    expect(new Set(first).size).toBe(first.length);
+    expect([...l.hashtags, ...added].every((w) => bank.includes(w))).toBe(true);
+    expect(l.hashtags).toHaveLength(5);
   });
 
-  it("a swapped-out hashtag moves to the keyword line; a swapped-in one leaves it", () => {
-    const d = sweaterDraft();
-    d.hashtags = ["cable", "knit", "cottagecore", "grandma", "chunky"];
-    expect(overflowKeywords(d.keywords!, d.hashtags, d.headline)).toEqual(["winter"]); // preppy is already in the first line
-    d.hashtags = ["cable", "knit", "cottagecore", "winter", "chunky"];
-    expect(overflowKeywords(d.keywords!, d.hashtags, d.headline)).toEqual(["grandma"]);
+  it("works whatever first line the model wrote", () => {
+    // style words further along: after the last one before the item words
+    expect(insertKeywords("Volcom vintage 2007 dark gray y2k skater concert graphic polo shirt", ["grunge", "surfer"], "Volcom"))
+      .toBe("Volcom vintage 2007 dark gray y2k skater grunge surfer concert graphic polo shirt");
+    // no style words: after brand + colour
+    expect(insertKeywords("Croft & Barrow cream cable knit sweater", ["chunky", "winter"], "Croft & Barrow"))
+      .toBe("Croft & Barrow cream chunky winter cable knit sweater");
+    // no style words, no brand at the start: before the item words
+    expect(insertKeywords("cream cable knit sweater", ["chunky"], "Unbranded")).toBe("cream chunky cable knit sweater");
+    // nothing to add, or already there
+    expect(insertKeywords(headline, [], "Croft & Barrow")).toBe(headline);
+    expect(insertKeywords(headline, ["preppy", "Preppy"], "Croft & Barrow")).toBe(headline);
   });
 
-  it("no keyword line when 5 or fewer words fit", () => {
+  it("caps the first line around 22 words, keeping the highest-ranked extras", () => {
+    const long = "Brand cream indie skater grunge oversized boxy heavyweight crewneck sweatshirt with big front graphic and ribbed cuffs and hem";
+    const out = insertKeywords(long, ["winter", "streetwear", "baggy", "retro", "casual"], "Brand").split(" ");
+    expect(out).toHaveLength(22);
+    expect(out).toContain("winter");
+    expect(out).not.toContain("casual");
+  });
+
+  it("no change when 5 or fewer words fit", () => {
     const keywords = rankKeywords(["thermal", "indie"]);
-    const d = buildDescription({ headline: "Old Navy gray waffle knit thermal", size: "M", flaws: [], measurementKind: "top", measurements: {}, hashtags: pickHashtags(keywords), keywords });
-    expect(d.split("\n\n")[0]).toBe("Old Navy gray waffle knit thermal\nsize M");
+    const h = "Old Navy gray indie waffle knit thermal";
+    expect(insertKeywords(h, overflowKeywords(keywords, pickHashtags(keywords), h), "Old Navy")).toBe(h);
   });
 });

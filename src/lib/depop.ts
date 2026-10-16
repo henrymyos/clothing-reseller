@@ -123,9 +123,9 @@ export function pickHashtags(chosen: string[], hints: { styles?: string[]; age?:
 }
 
 /**
- * The bank words that didn't make the 5 hashtags, for the search-word line right
- * after the size. Skips anything already a hashtag or already in the first line,
- * so no word shows up more than twice in the description.
+ * The bank words that didn't make the 5 hashtags, to work into the first line.
+ * Skips anything already a hashtag or already in the first line, so no word
+ * shows up more than twice in the description.
  */
 export function overflowKeywords(keywords: string[], hashtags: string[], headline = ""): string[] {
   const used = new Set([...hashtags.map(cleanHashtag), ...headline.toLowerCase().split(/[^a-z0-9]+/)]);
@@ -165,13 +165,11 @@ export type ListingDraft = {
   measurementKind: MeasurementKind;
   measurements: Record<string, string>;
   hashtags: string[];
-  keywords?: string[];      // every bank word that fits, ranked; the ones not hashtagged go after the size
 };
 
 // The Depop description, laid out the way @soldbychica writes hers:
 //   Eddie Bauer gray skater surfer indie waffle knit thermal long sleeve shirt
 //   size L
-//   grunge winter          <- bank words that fit but aren't hashtags (search words)
 //   small stain on front (pictured)
 //
 //   #indie #skater #surfer #thermal #winter
@@ -182,15 +180,13 @@ export function buildDescription(d: ListingDraft): string {
   if (d.headline.trim()) top.push(d.headline.trim());
   const size = d.size.trim();
   top.push(size && !/not visible|unknown/i.test(size) ? `size ${size.replace(/^size\s+/i, "")}` : "size not tagged — check measurements for accuracy");
-  const tags = d.hashtags.map(cleanHashtag).filter(Boolean).slice(0, MAX_HASHTAGS);
-  const extra = overflowKeywords(d.keywords ?? [], tags, d.headline);
-  if (extra.length) top.push(extra.join(" "));
   for (const f of d.flaws.map((x) => x.trim()).filter(Boolean)) top.push(/pictured/i.test(f) ? f : `${f} (pictured)`);
   const fields = MEASUREMENT_FIELDS[d.measurementKind] ?? [];
   const meas = fields
     .map((f) => (d.measurements[f.key]?.trim() ? `${f.label.toLowerCase()} ${formatInches(d.measurements[f.key])}` : ""))
     .filter(Boolean);
   if (meas.length) top.push(`measurements laid flat: ${meas.join(", ")}`);
+  const tags = d.hashtags.map(cleanHashtag).filter(Boolean).slice(0, MAX_HASHTAGS);
   return [top.join("\n"), tags.map((t) => `#${t}`).join(" ")].filter(Boolean).join("\n\n");
 }
 
@@ -264,4 +260,44 @@ export function enrichHeadline(headline: string, candidates: string[], color = "
   const insert = [...(needColor ? [color.trim().toLowerCase()] : []), ...add];
   if (!insert.length) return words.join(" ");
   return [...words.slice(0, at), ...insert, ...words.slice(at)].join(" ");
+}
+
+export const MAX_HEADLINE_WORDS = 22;
+
+/**
+ * Put the extra bank words (see overflowKeywords) into the first line, right after
+ * its run of style words: "Croft & Barrow cream cottagecore preppy cable knit
+ * sweater" + [chunky, winter] → "… cream cottagecore preppy chunky winter cable knit
+ * sweater". With no style words they go after the brand and colour. Done here, not
+ * by the model, so it works whatever first line the model wrote. Highest-ranked
+ * extras are kept if the line would pass ~22 words.
+ */
+export function insertKeywords(headline: string, extras: string[], brand = ""): string {
+  const words = headline.trim().split(/\s+/).filter(Boolean);
+  const key = (w: string) => w.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const present = new Set(words.map(key));
+  const add = extras.map(key).filter((k, i, a) => k && !present.has(k) && a.indexOf(k) === i)
+    .slice(0, Math.max(0, MAX_HEADLINE_WORDS - words.length));
+  if (!words.length || !add.length) return words.join(" ");
+  const isStyle = (w: string) => {
+    const k = key(w);
+    return !!STYLE_WORDS[k] || (BANK.has(k) && !GARMENT_WORDS.test(k));
+  };
+  // The style run sits before the item words; insert after its last word.
+  const g0 = words.findIndex((w, i) => i > 0 && GARMENT_WORDS.test(w.replace(/[^a-z-]/gi, "")));
+  let at = -1;
+  for (let i = (g0 > 0 ? g0 : words.length) - 1; i >= 0 && at < 0; i--) if (isStyle(words[i])) at = i + 1;
+  if (at < 0) {
+    // After the brand (if the line starts with it), then after a colour word right behind it.
+    const b = brand.trim().split(/\s+/).filter(Boolean);
+    const startsWithBrand = b.length > 0 && !/^(unbranded|unknown)$/i.test(brand.trim())
+      && b.every((w, i) => key(words[i] ?? "") === key(w));
+    at = startsWithBrand ? b.length : 0;
+    for (let i = at; i < Math.min(words.length, at + 3); i++) if (COLOR_WORDS.test(words[i].replace(/[^a-z]/gi, ""))) at = i + 1;
+    if (!startsWithBrand && at === 0) {
+      const g = words.findIndex((w, i) => i > 0 && GARMENT_WORDS.test(w.replace(/[^a-z-]/gi, "")));
+      at = g > 0 ? g : words.length;
+    }
+  }
+  return [...words.slice(0, at), ...add, ...words.slice(at)].join(" ");
 }
