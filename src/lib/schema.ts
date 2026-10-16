@@ -38,10 +38,10 @@ export const analysisSchema = z.object({
   age: z.enum(AGES).describe("Depop age: 'Modern' unless the tag/construction clearly dates it."),
   source: z.enum(SOURCES).describe("Depop source — usually 'Preloved', or 'Vintage' for 20+ year old pieces, 'Deadstock' for unworn old stock."),
   material: z.string().describe("Fabric content from the care tag if visible (e.g. '80% cotton, 20% polyester'), else a best guess prefixed with 'Likely', or 'Unknown'."),
-  hashtags: z
+  keywords: z
     .array(z.enum(HASHTAG_BANK))
-    .max(5)
-    .describe("Exactly 5 different hashtags from the seller's word bank — the 5 that best match this item's style, fabric, pattern, era and season (e.g. a gray waffle thermal: 'thermal', 'indie', 'skater', 'grunge', 'winter'; a cream cable knit sweater: 'cable', 'knit', 'cottagecore', 'grandma', 'preppy')."),
+    .max(12)
+    .describe("EVERY word from the seller's word bank that genuinely fits this item — style, fabric, knit/pattern, fit, era, season — ranked best first, no repeats. The top 5 become the hashtags; the rest go in the description as search words, so include all that fit (usually 5–10), not just 5. E.g. a cream cable knit sweater: 'cable', 'knit', 'cottagecore', 'grandma', 'preppy', 'chunky', 'cottage', 'winter'."),
   measurementKind: z.enum(MEASUREMENT_KINDS).describe("Which measurements apply: top, bottoms, shorts, dress, skirt, shoes, accessory."),
   estimatedWeightOz: z.number().describe("Item weight in ounces (without packaging), e.g. tee ~6, hoodie ~20, jeans ~22, heavy jacket ~45."),
   searchQuery: z
@@ -88,6 +88,7 @@ export type Comps = {
 };
 
 export type AnalyzeResponse = Analysis & {
+  hashtags: string[]; // the top 5 keywords; keywords not hashtagged go after the size line
   comps: Comps | null;
   mySales: import("@/lib/sales").MySales | null;
   priceBasis?: import("@/lib/pricing").PriceBasis; // what the price is anchored on
@@ -103,7 +104,7 @@ const ANALYSIS_ARRAY_MAX: Partial<Record<keyof Analysis, number>> = {
   visibleFlaws: 6,
   colors: 2,
   styles: 3,
-  hashtags: 5,
+  keywords: 12,
 };
 
 /**

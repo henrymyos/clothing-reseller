@@ -39,7 +39,7 @@ npm test                     # unit tests (vitest)
    matched sales when she has 2+, otherwise capped just above the closest Depop matches' median.
 6. **Listing** (`src/lib/depop.ts`): everything is editable; the Depop description is written in
    her own format — a keyword-rich first line (colour + style words buyers search + item, topped
-   up by `enrichHeadline`), `size …`, any flaws "(pictured)", optional measurements and 5 hashtags
+   up by `enrichHeadline`), `size …`, a line of extra word-bank search words (every fitting bank word past the 5 hashtags, minus any already in the first line; `rankKeywords` + `overflowKeywords`), any flaws "(pictured)", optional measurements and 5 hashtags
    chosen from her word bank (`HASHTAG_BANK`; `pickHashtags` guarantees 5, no SKU in the text) — rebuilt live and copied in one tap. Brand, condition and material go in
    Depop's own fields, not the description. Shipping weight and fee/profit math use editable Depop US defaults
    (processing 3.3% + $0.45 on item + shipping + tax, 12% boost fee — checked against real payouts).

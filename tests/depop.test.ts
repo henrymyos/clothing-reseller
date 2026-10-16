@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { HASHTAG_BANK, buildDescription, cleanHashtag, enrichHeadline, pickHashtags, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
+import { HASHTAG_BANK, buildDescription, cleanHashtag, enrichHeadline, overflowKeywords, pickHashtags, rankKeywords, profit, shippedWeightOz, formatWeight, formatInches, type ListingDraft } from "@/lib/depop";
 
 const draft = (over: Partial<ListingDraft> = {}): ListingDraft => ({
   headline: "Carhartt brown vintage 90s workwear Detroit jacket with blanket lining",
@@ -120,5 +120,68 @@ describe("pickHashtags", () => {
   it("falls back to safe defaults rather than fewer than 5", () => {
     expect(pickHashtags([])).toEqual(["casual", "vintage", "indie", "streetwear", "winter"]);
     expect(new Set(pickHashtags(["casual", "casual", "casual"])).size).toBe(5);
+  });
+});
+
+describe("SEO keywords (every fitting bank word lands in the description)", () => {
+  const bank = HASHTAG_BANK as readonly string[];
+  // A cream cable-knit sweater the model matched to 7 bank words (plus one off-bank word).
+  const sweater = {
+    model: ["cable", "knit", "cottagecore", "grandma", "preppy", "chunky", "cozy", "winter"],
+    hints: { styles: ["Cottagecore", "Preppy"], age: "Modern", text: "Croft & Barrow cream cottagecore cable knit sweater" },
+  };
+  const rankedSweater = () => rankKeywords(sweater.model, sweater.hints);
+  const sweaterDraft = (): ListingDraft => {
+    const keywords = rankedSweater();
+    return {
+      headline: "Croft & Barrow cream cottagecore preppy cable knit sweater", size: "L", flaws: ["light pilling on sleeve"],
+      measurementKind: "top", measurements: {}, hashtags: pickHashtags(keywords, sweater.hints), keywords,
+    };
+  };
+
+  it("ranks all fitting bank words, model's order first, and drops off-bank words", () => {
+    expect(rankedSweater()).toEqual(["cable", "knit", "cottagecore", "grandma", "preppy", "chunky", "winter"]);
+  });
+
+  it("always adds words the item itself implies, even if the model misses them", () => {
+    expect(rankKeywords([], { age: "90s", text: "gray striped waffle thermal long sleeve" }))
+      .toEqual(["90s", "striped", "thermal", "winter"]);
+    expect(rankKeywords(["preppy"], { text: "navy cardigan" })).toEqual(["preppy", "knit"]);
+  });
+
+  it("puts the 6th+ matches right after the size line, before flaws", () => {
+    expect(buildDescription(sweaterDraft())).toBe(
+      "Croft & Barrow cream cottagecore preppy cable knit sweater\n" +
+      "size L\n" +
+      "chunky winter\n" +
+      "light pilling on sleeve (pictured)\n\n" +
+      "#cable #knit #cottagecore #grandma #preppy",
+    );
+  });
+
+  it("every fitting bank word appears, none twice between hashtags and the keyword line, only bank words", () => {
+    const d = sweaterDraft();
+    const desc = buildDescription(d);
+    const hashtags = (desc.match(/#\w+/g) ?? []).map((t) => t.slice(1));
+    const line = desc.split("\n")[2].split(" ");
+    for (const k of rankedSweater()) expect(hashtags.includes(k) || line.includes(k)).toBe(true);
+    expect(line.filter((w) => hashtags.includes(w))).toEqual([]);
+    expect(new Set(line).size).toBe(line.length);
+    expect([...hashtags, ...line].every((w) => bank.includes(w))).toBe(true);
+    expect(hashtags).toHaveLength(5);
+  });
+
+  it("a swapped-out hashtag moves to the keyword line; a swapped-in one leaves it", () => {
+    const d = sweaterDraft();
+    d.hashtags = ["cable", "knit", "cottagecore", "grandma", "chunky"];
+    expect(overflowKeywords(d.keywords!, d.hashtags, d.headline)).toEqual(["winter"]); // preppy is already in the first line
+    d.hashtags = ["cable", "knit", "cottagecore", "winter", "chunky"];
+    expect(overflowKeywords(d.keywords!, d.hashtags, d.headline)).toEqual(["grandma"]);
+  });
+
+  it("no keyword line when 5 or fewer words fit", () => {
+    const keywords = rankKeywords(["thermal", "indie"]);
+    const d = buildDescription({ headline: "Old Navy gray waffle knit thermal", size: "M", flaws: [], measurementKind: "top", measurements: {}, hashtags: pickHashtags(keywords), keywords });
+    expect(d.split("\n\n")[0]).toBe("Old Navy gray waffle knit thermal\nsize M");
   });
 });

@@ -7,7 +7,7 @@ import type { MySales } from "@/lib/sales";
 import {
   AGES, COLORS, CONDITIONS, DEFAULT_FEES, DEPARTMENTS, HASHTAG_BANK, MAX_COLORS, MAX_DESCRIPTION, MAX_HASHTAGS,
   MAX_STYLES, MEASUREMENT_FIELDS, MEASUREMENT_KINDS, SOURCES, STYLES,
-  buildDescription, formatWeight, profit, shippedWeightOz,
+  buildDescription, formatWeight, overflowKeywords, profit, shippedWeightOz,
   type Condition, type MeasurementKind,
 } from "@/lib/depop";
 import { Card, Label, input } from "@/components/ui";
@@ -25,7 +25,7 @@ const PHOTO_HINTS = ["Front", "Back", "Brand / size tag", "Care tag", "Flaw clos
 // rebuilt from these on every change, so the copied text always matches.
 type Draft = {
   headline: string; sku: string; brand: string; size: string; condition: Condition; material: string;
-  flaws: string[]; measurementKind: MeasurementKind; measurements: Record<string, string>; hashtags: string[];
+  flaws: string[]; measurementKind: MeasurementKind; measurements: Record<string, string>; hashtags: string[]; keywords: string[];
   department: string; category: string; subcategory: string; colors: string[]; styles: string[];
   age: string; source: string; price: string; weightOz: string;
 };
@@ -33,7 +33,7 @@ type Draft = {
 function draftFrom(r: AnalyzeResponse, sku: string): Draft {
   return {
     headline: r.headline, sku, brand: r.brand, size: r.size, condition: r.condition, material: r.material,
-    flaws: r.visibleFlaws, measurementKind: r.measurementKind, measurements: {}, hashtags: r.hashtags,
+    flaws: r.visibleFlaws, measurementKind: r.measurementKind, measurements: {}, hashtags: r.hashtags, keywords: r.keywords ?? [],
     department: r.department, category: r.category, subcategory: r.subcategory, colors: r.colors, styles: r.styles,
     age: r.age, source: r.source, price: String(r.suggestedPrice), weightOz: String(Math.round(r.estimatedWeightOz)),
   };
@@ -275,6 +275,9 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
         </Field>
         <p className="mt-1 text-xs text-muted">Written like your listings, with extra words buyers search for. Brand, condition and material go in Depop&apos;s own fields below.</p>
         <Chips label={`Hashtags — ${draft.hashtags.length} of ${MAX_HASHTAGS} from your word bank (tap to swap)`} options={HASHTAG_BANK} value={draft.hashtags} max={MAX_HASHTAGS} onChange={(v) => set("hashtags", v)} />
+        {overflowKeywords(draft.keywords, draft.hashtags, draft.headline).length > 0 && (
+          <p className="mt-1 text-xs text-muted">Other word-bank matches, added after the size so buyers searching them find it: {overflowKeywords(draft.keywords, draft.hashtags, draft.headline).join(", ")}</p>
+        )}
         <p className="mt-3 text-xs font-medium text-muted">Preview</p>
         <pre className="mt-1 whitespace-pre-wrap rounded-xl bg-cream p-3 font-sans text-sm text-ink-soft">{description}</pre>
         <p className={`mt-1 text-right text-xs ${description.length > MAX_DESCRIPTION ? "text-cherry" : "text-muted"}`}>

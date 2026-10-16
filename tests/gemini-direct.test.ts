@@ -19,7 +19,7 @@ const ANALYSIS: Analysis = {
   distinctiveFeatures: ["waffle knit"], department: "Men", category: "Tops", subcategory: "T-shirts",
   size: "L", sizeSource: "tag", sizeTagText: "L", condition: "Used - Excellent", visibleFlaws: [],
   colors: ["Grey"], styles: ["Skater", "Indie"], age: "Modern", source: "Preloved", material: "100% cotton",
-  hashtags: ["thermal", "indie", "skater", "grunge", "casual"], measurementKind: "top", estimatedWeightOz: 8,
+  keywords: ["thermal", "indie", "skater", "grunge", "casual", "winter"], measurementKind: "top", estimatedWeightOz: 8,
   searchQuery: "eddie bauer waffle thermal", searchQueryBroad: "waffle thermal long sleeve",
   priceLow: 18, priceHigh: 26, suggestedPrice: 22, priceReasoning: "Clean mainstream thermal.", confidence: "high",
 };
@@ -91,7 +91,7 @@ describe("direct Gemini structured output", () => {
     expect(schema.type).toBe("object");
     expect(schema.required).toEqual(expect.arrayContaining(Object.keys(ANALYSIS)));
     expect(schema.properties.condition.enum).toContain("Used - Excellent");
-    expect(schema.properties.hashtags.items?.enum).toContain("thermal");
+    expect(schema.properties.keywords.items?.enum).toContain("thermal");
     expect(schema.properties.estimatedWeightOz.type).toBe("number");
     // Nothing Gemini's OpenAPI-style schema rejects.
     expect(JSON.stringify(schema)).not.toMatch(/"\$schema"|"additionalProperties"|"\$ref"/);

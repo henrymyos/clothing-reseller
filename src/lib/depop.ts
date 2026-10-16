@@ -85,16 +85,25 @@ const TAG_ALIASES: Record<string, string[]> = {
   hike: ["hiking"], outdoor: ["outdoors"], sporty: ["sportswear"], nineties: ["90s"], "1990s": ["90s"], darkacademia: ["academia"],
 };
 
+// Garment words that always imply a bank word, so it's never missed (a sweater is knit, a thermal is for winter).
+const IMPLIED: Record<string, string[]> = {
+  sweater: ["knit"], cardigan: ["knit"], knitted: ["knit"], beanie: ["knit", "winter"],
+  thermal: ["winter"], fleece: ["winter"], puffer: ["winter"], parka: ["winter"], flannel: ["winter"],
+  carpenter: ["workwear"],
+};
+export const MAX_KEYWORDS = 12;         // hashtags + the search words after the size line
+
 /**
- * Exactly 5 hashtags from her word bank: the model's picks that are in the bank
- * first, then words the item itself suggests (its style tags, era, and words in
- * its title like "thermal" or "striped"), then safe defaults.
+ * Every word-bank word that fits the item, best first and without repeats: the
+ * model's ranked picks, then the item's own style tags, era, and words in its
+ * title/features ("thermal", "cable", "striped"), then words those garments imply.
+ * The deterministic part means an obvious word is in even if the model missed it.
  */
-export function pickHashtags(chosen: string[], hints: { styles?: string[]; age?: string; text?: string } = {}): Hashtag[] {
+export function rankKeywords(chosen: string[], hints: { styles?: string[]; age?: string; text?: string } = {}): Hashtag[] {
   const out: string[] = [];
   const add = (w: string) => {
     const k = cleanHashtag(w);
-    for (const t of BANK.has(k) ? [k] : TAG_ALIASES[k] ?? []) if (!out.includes(t) && out.length < MAX_HASHTAGS) out.push(t);
+    for (const t of BANK.has(k) ? [k] : TAG_ALIASES[k] ?? []) if (!out.includes(t)) out.push(t);
   };
   chosen.forEach(add);
   (hints.styles ?? []).forEach(add);
@@ -102,8 +111,27 @@ export function pickHashtags(chosen: string[], hints: { styles?: string[]; age?:
   if (hints.age === "00s") add("y2k");
   const words = (hints.text ?? "").toLowerCase().split(/[^a-z0-9]+/);
   for (const w of words) add(w);
-  for (const d of ["casual", "vintage", "indie", "streetwear", "winter"]) add(d);
-  return out.slice(0, MAX_HASHTAGS) as Hashtag[];
+  for (const w of words) (IMPLIED[w] ?? []).forEach(add);
+  return out.slice(0, MAX_KEYWORDS) as Hashtag[];
+}
+
+/** Exactly 5 hashtags from her word bank: the top-ranked keywords, then safe defaults. */
+export function pickHashtags(chosen: string[], hints: { styles?: string[]; age?: string; text?: string } = {}): Hashtag[] {
+  const out: string[] = rankKeywords(chosen, hints).slice(0, MAX_HASHTAGS);
+  for (const d of ["casual", "vintage", "indie", "streetwear", "winter"]) if (out.length < MAX_HASHTAGS && !out.includes(d)) out.push(d);
+  return out as Hashtag[];
+}
+
+/**
+ * The bank words that didn't make the 5 hashtags, for the search-word line right
+ * after the size. Skips anything already a hashtag or already in the first line,
+ * so no word shows up more than twice in the description.
+ */
+export function overflowKeywords(keywords: string[], hashtags: string[], headline = ""): string[] {
+  const used = new Set([...hashtags.map(cleanHashtag), ...headline.toLowerCase().split(/[^a-z0-9]+/)]);
+  const out: string[] = [];
+  for (const k of keywords.map(cleanHashtag)) if (BANK.has(k) && !used.has(k) && !out.includes(k)) out.push(k);
+  return out;
 }
 export const MAX_DESCRIPTION = 1000;    // Depop description character limit
 export const MAX_STYLES = 3;
@@ -137,11 +165,13 @@ export type ListingDraft = {
   measurementKind: MeasurementKind;
   measurements: Record<string, string>;
   hashtags: string[];
+  keywords?: string[];      // every bank word that fits, ranked; the ones not hashtagged go after the size
 };
 
 // The Depop description, laid out the way @soldbychica writes hers:
 //   Eddie Bauer gray skater surfer indie waffle knit thermal long sleeve shirt
 //   size L
+//   grunge winter          <- bank words that fit but aren't hashtags (search words)
 //   small stain on front (pictured)
 //
 //   #indie #skater #surfer #thermal #winter
@@ -152,13 +182,15 @@ export function buildDescription(d: ListingDraft): string {
   if (d.headline.trim()) top.push(d.headline.trim());
   const size = d.size.trim();
   top.push(size && !/not visible|unknown/i.test(size) ? `size ${size.replace(/^size\s+/i, "")}` : "size not tagged — check measurements for accuracy");
+  const tags = d.hashtags.map(cleanHashtag).filter(Boolean).slice(0, MAX_HASHTAGS);
+  const extra = overflowKeywords(d.keywords ?? [], tags, d.headline);
+  if (extra.length) top.push(extra.join(" "));
   for (const f of d.flaws.map((x) => x.trim()).filter(Boolean)) top.push(/pictured/i.test(f) ? f : `${f} (pictured)`);
   const fields = MEASUREMENT_FIELDS[d.measurementKind] ?? [];
   const meas = fields
     .map((f) => (d.measurements[f.key]?.trim() ? `${f.label.toLowerCase()} ${formatInches(d.measurements[f.key])}` : ""))
     .filter(Boolean);
   if (meas.length) top.push(`measurements laid flat: ${meas.join(", ")}`);
-  const tags = d.hashtags.map(cleanHashtag).filter(Boolean).slice(0, MAX_HASHTAGS);
   return [top.join("\n"), tags.map((t) => `#${t}`).join(" ")].filter(Boolean).join("\n\n");
 }
 
