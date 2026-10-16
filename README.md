@@ -111,6 +111,24 @@ sales (item titles and prices, no buyer details) that go into the price check. T
 fine for clothing photos, but it's your call. Turning on billing for the Google project switches
 it to the paid tier (no training use, but it costs money per request).
 
+## Styled photos (free)
+
+Under the description, a **Styled photos (free)** card gives two ready-to-paste prompts,
+**On a model** (neck down, face out of frame) and **Flat-lay outfit** (overhead, neutral surface,
+2–4 plain unbranded pieces that never cover the item; style chip Streetwear / Vintage / Casual /
+Dressy, default Casual). They're filled from the listing (type, brand, colours, material, size,
+details, style) and follow her edits; if the analysis failed, they're built from her notes.
+Every prompt tells the AI to use the attached photo as the reference, keep the exact garment
+(colour, print, logo, text, shape), show no face and output 2:3 portrait for Pinterest. Kids'
+items get no on-model prompt.
+
+She taps **Copy prompt** (falls back to selecting the text if the clipboard is blocked), opens
+the Gemini app (or ChatGPT), attaches her front photo, pastes and saves the result. The free
+Gemini app allows roughly 20 images a day. SnapList makes **no image calls**, costs nothing and
+stores nothing for this; the templates are in `src/lib/stylePrompts.ts` (tests in
+`tests/stylePrompts.test.ts`). Automatic generation in the app (Nova's full spec,
+`~/Documents/Ideas/specs/snaplist-ai-images.md`) needs a paid Google key and isn't built.
+
 ## Staying up
 
 - `/api/health` checks the AI models, Exa's Depop search and Depop's listing format; it answers
