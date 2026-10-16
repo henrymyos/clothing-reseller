@@ -15,6 +15,8 @@ import { inventoryToSales, nextSku, sheetRow, type InvItem } from "@/lib/invento
 import { readInventory } from "@/lib/inventoryStore";
 import { readSales, type SalesStore } from "@/lib/salesStore";
 import { clearedMessage, whatWasCleared } from "@/lib/savedFlag";
+import { StyledPhotos } from "@/components/StyledPhotos";
+import type { PromptItem } from "@/lib/stylePrompts";
 
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
@@ -187,6 +189,11 @@ export default function Home() {
         {error && <div className="mt-4 rounded-xl border border-cherry/30 bg-blush p-4 text-sm text-cherry-dark">{error}</div>}
 
         {result && draft && status === "done" && <Results key={runId} result={result} draft={draft} setDraft={setDraft} />}
+
+        {/* The free styled-photo prompts still work when the analysis failed: built from her notes. */}
+        {status === "error" && photos.length > 0 && (
+          <div className="mt-4"><StyledPhotos item={{ notes }} fromNotes /></div>
+        )}
       </div>
     </main>
   );
@@ -206,6 +213,12 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
   const shipOz = shippedWeightOz(Number(draft.weightOz) || 0);
   const fields = MEASUREMENT_FIELDS[draft.measurementKind];
   const sizeMissing = !draft.size.trim() || /not visible/i.test(draft.size);
+  // The styled-photo prompts follow her edits (brand, colours, department…).
+  const promptItem: PromptItem = useMemo(() => ({
+    itemType: result.itemType, brand: draft.brand, colors: draft.colors, material: draft.material, size: draft.size,
+    distinctiveFeatures: result.distinctiveFeatures, styles: draft.styles, department: draft.department,
+    category: draft.category, subcategory: draft.subcategory, measurementKind: draft.measurementKind,
+  }), [result, draft]);
 
   return (
     <div className="mt-6 space-y-4">
@@ -268,6 +281,8 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
           {description.length}/{MAX_DESCRIPTION}{description.length > MAX_DESCRIPTION ? " — too long for Depop, shorten the first line" : ""}
         </p>
       </Card>
+
+      <StyledPhotos item={promptItem} />
 
       {/* Measurements */}
       <Card>
