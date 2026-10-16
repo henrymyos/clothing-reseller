@@ -12,7 +12,7 @@ import type { LanguageModel } from "ai";
 // are tagged "google-direct/…" so they never collide with the gateway's "google/…" ids
 // in logs, skip timers or the notices.
 export const DIRECT_PREFIX = "google-direct/";
-export const DIRECT_GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash"];
+export const DIRECT_GEMINI_MODELS = ["gemini-3.5-flash-lite", "gemini-3.8-flash"];
 export const DIRECT_MODEL_IDS = DIRECT_GEMINI_MODELS.map((m) => DIRECT_PREFIX + m);
 export const isDirectModel = (id: string) => id.startsWith(DIRECT_PREFIX);
 

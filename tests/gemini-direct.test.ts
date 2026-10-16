@@ -31,7 +31,7 @@ function geminiReply(obj: unknown) {
   return new Response(JSON.stringify({
     candidates: [{ content: { role: "model", parts: [{ text: JSON.stringify(obj) }] }, finishReason: "STOP", index: 0 }],
     usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 10, totalTokenCount: 20 },
-    modelVersion: "gemini-2.5-flash-lite",
+    modelVersion: "gemini-3.5-flash-lite",
   }), { status: 200, headers: { "content-type": "application/json" } });
 }
 function geminiError(status: number, message: string, quotaId?: string) {
@@ -83,7 +83,7 @@ describe("direct Gemini structured output", () => {
 
     expect(calls).toHaveLength(1);
     const { url, body, apiKey } = calls[0];
-    expect(url).toContain("/models/gemini-2.5-flash-lite:generateContent");
+    expect(url).toContain("/models/gemini-3.5-flash-lite:generateContent");
     expect(apiKey).toBe("test-key-not-real");
     const config = body.generationConfig as { responseMimeType: string; responseSchema: { type: string; required: string[]; properties: Record<string, { type?: string; enum?: string[]; items?: { enum?: string[] } }> } };
     expect(config.responseMimeType).toBe("application/json");
@@ -127,12 +127,12 @@ describe("falling back from direct Gemini to the gateway", () => {
     expect(object.headline).toBe(`gateway ${PRIMARY_MODEL}`);
     expect(used).toEqual([PRIMARY_MODEL]);
     // One quick retry per direct model, no SDK-level retries on top.
-    expect(calls.map((c) => c.url.match(/models\/([^:]+)/)![1])).toEqual(["gemini-2.5-flash-lite", "gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-flash"]);
+    expect(calls.map((c) => c.url.match(/models\/([^:]+)/)![1])).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-flash"]);
     expect(modelNotice(used)).toMatch(/backup \(Claude Haiku\) wrote this listing/);
   }, 10_000);
 
   it("doesn't retry a used-up daily quota, and tries Flash next", async () => {
-    fakeNetwork((model) => model === "gemini-2.5-flash-lite"
+    fakeNetwork((model) => model === "gemini-3.5-flash-lite"
       ? geminiError(429, "You exceeded your current quota, please check your plan and billing details.", "GenerateRequestsPerDayPerProjectPerModel-FreeTier")
       : geminiReply(ANALYSIS));
     const used: string[] = [];
@@ -143,7 +143,7 @@ describe("falling back from direct Gemini to the gateway", () => {
   });
 
   it("falls straight through on a rejected key or a server error", async () => {
-    fakeNetwork((model) => model === "gemini-2.5-flash-lite"
+    fakeNetwork((model) => model === "gemini-3.5-flash-lite"
       ? geminiError(400, "API key not valid. Please pass a valid API key.")
       : geminiError(500, "Internal error encountered."));
     const used: string[] = [];

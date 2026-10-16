@@ -94,7 +94,7 @@ instead of failing the call.
 4. **Redeploy** (Deployments → latest production → Redeploy). A new environment variable only
    reaches deployments made after it was added.
 5. Check https://<your SnapList domain>/api/health: `checks.ai.route` should say
-   `"google-direct"` and `checks.ai.detail` should start with `google-direct/gemini-2.5-flash-lite`.
+   `"google-direct"` and `checks.ai.detail` should start with `google-direct/gemini-3.5-flash-lite`.
 
 **Free tier limits.** Google's free tier has per-minute and per-day request limits for each
 model, counted per Google Cloud project (not per key), and the daily count resets at midnight

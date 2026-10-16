@@ -7,8 +7,8 @@ import type { SearchStatus } from "@/lib/comps";
 // Direct Gemini (her own free Google key) and the Vercel AI Gateway can both run a
 // Gemini Flash Lite, so the names say which route it was.
 const NAMES: Record<string, string> = {
-  "google-direct/gemini-2.5-flash-lite": "Gemini Flash Lite, direct from Google",
-  "google-direct/gemini-2.5-flash": "Gemini Flash, direct from Google",
+  "google-direct/gemini-3.5-flash-lite": "Gemini Flash Lite, direct from Google",
+  "google-direct/gemini-3.8-flash": "Gemini Flash, direct from Google",
   "anthropic/claude-haiku-4-5": "Claude Haiku",
   "google/gemini-2.5-flash-lite": "Gemini Flash Lite via Vercel",
   "openai/gpt-5-nano": "GPT-5 nano",

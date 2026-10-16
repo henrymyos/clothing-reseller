@@ -38,9 +38,9 @@ describe("model chain", () => {
     const chain = modelChain();
     expect(chain.map((m) => m.id)).toEqual([DIRECT_LITE, DIRECT_FLASH, ...GATEWAY_MODELS]);
     const direct = chain[0].model as { modelId: string; provider: string };
-    expect(direct.modelId).toBe("gemini-2.5-flash-lite");
+    expect(direct.modelId).toBe("gemini-3.5-flash-lite");
     expect(direct.provider).toMatch(/google/);
-    expect((chain[1].model as { modelId: string }).modelId).toBe("gemini-2.5-flash");
+    expect((chain[1].model as { modelId: string }).modelId).toBe("gemini-3.8-flash");
     expect(chain.slice(2).map((m) => m.model)).toEqual(GATEWAY_MODELS);
     expect(usualModels()).toEqual(DIRECT_MODEL_IDS);
   });
