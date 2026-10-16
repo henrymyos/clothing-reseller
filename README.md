@@ -4,13 +4,14 @@ Snap a clothing item → get a **ready-to-post Depop listing**: description with
 measurements, condition and flaws, every field Depop's Sell form asks for, a price grounded
 on matching Depop listings, packed weight, and your take-home profit after fees.
 
-Built with Next.js (App Router) + the Vercel AI SDK, with a vision model through the Vercel
-AI Gateway and Depop search via [Exa](https://exa.ai).
+Built with Next.js (App Router) + the Vercel AI SDK, with a vision model called directly on
+Google's Gemini API (free key) or through the Vercel AI Gateway, and Depop search via
+[Exa](https://exa.ai).
 
 ## Setup
 
 ```bash
-vercel env pull .env.local   # AI Gateway (OIDC) + EXA_API_KEY
+vercel env pull .env.local   # AI Gateway (OIDC) + EXA_API_KEY (+ GOOGLE_GENERATIVE_AI_API_KEY if set in Vercel)
 npm install
 npm run dev                  # http://localhost:3000
 npm test                     # unit tests (vitest)
@@ -62,12 +63,53 @@ stock, and the data imports. `/inventory` redirects to `/shop`.
 
 ## Models
 
-`src/lib/model.ts` tries Claude Haiku, then free-tier fallbacks. On the AI Gateway's free tier
-Claude isn't available, so calls run on Gemini Flash Lite; refused models are remembered for
-15 minutes, rate limits get one quick retry, and every call has a time limit so a stuck
-request can't exceed the 60s function limit. Any other model failure (retired model, provider
-outage) also falls through to the next model (Gemini 2.5 Flash Lite → GPT-5 nano → Gemini 3.1
-Flash Lite).
+`src/lib/model.ts` builds the chain of models to try, in order:
+
+1. **Direct Gemini**, only when `GOOGLE_GENERATIVE_AI_API_KEY` is set: Gemini 2.5 Flash Lite,
+   then Gemini 2.5 Flash, called on Google's Gemini API with a free Google AI Studio key
+   (`@ai-sdk/google`). Both are vision models on Google's free tier.
+2. **The Vercel AI Gateway** (uses the gateway's credit): Claude Haiku, then the gateway's
+   free-tier fallbacks Gemini 2.5 Flash Lite → GPT-5 nano → Gemini 3.1 Flash Lite.
+
+Without the Google key the app runs exactly as before (gateway only). With it, the gateway is
+the backup. Refused models are remembered for 15 minutes (a used-up Google daily quota counts
+as refused), rate limits get one quick retry and then the next model, any other failure
+(retired model, outage, bad key) also falls through, and every call has a time limit so a
+stuck request can't exceed the 60s function limit. Model ids in logs and notices are tagged
+`google-direct/…` for direct Gemini so they don't get mixed up with the gateway's `google/…`.
+
+Gemini's structured output isn't told array lengths (the Google provider drops `maxItems`),
+so `trimAnalysisArrays` in `src/lib/schema.ts` trims an over-long list (say, four styles)
+instead of failing the call.
+
+### Turning on the free Google key (direct Gemini)
+
+1. Go to https://aistudio.google.com/apikey, signed in with your Google account or your
+   sister's, and click **Create API key**. Copy it. (Whoever's account it is owns the quota.)
+2. In Vercel: the SnapList project → **Settings → Environment Variables** → add
+   `GOOGLE_GENERATIVE_AI_API_KEY` with the key as the value, for **Production** (and
+   **Preview** if you use preview deployments). Mark it Sensitive.
+3. Locally: add the line `GOOGLE_GENERATIVE_AI_API_KEY=<the key>` to `.env.local` (it's
+   gitignored), or run `vercel env pull .env.local` after step 2.
+4. **Redeploy** (Deployments → latest production → Redeploy). A new environment variable only
+   reaches deployments made after it was added.
+5. Check https://<your SnapList domain>/api/health: `checks.ai.route` should say
+   `"google-direct"` and `checks.ai.detail` should start with `google-direct/gemini-2.5-flash-lite`.
+
+**Free tier limits.** Google's free tier has per-minute and per-day request limits for each
+model, counted per Google Cloud project (not per key), and the daily count resets at midnight
+Pacific time. Google no longer prints the numbers in its docs; your project's exact limits and
+usage are on AI Studio's rate-limit page (https://aistudio.google.com/rate-limit). Each listing
+uses about two requests (reading the photos, then the price check). When Flash Lite's limit is
+hit SnapList moves to Flash, then to the gateway; if everything is used up she sees a message
+saying the free Google requests reset overnight.
+
+**Privacy on the free tier.** Google's pricing page says that on the free tier, what you send
+(prompts and photos) **may be used by Google to improve its products**; on the paid tier it
+isn't. For SnapList that means the clothing photos, her notes on the item, and her matching past
+sales (item titles and prices, no buyer details) that go into the price check. That's likely
+fine for clothing photos, but it's your call. Turning on billing for the Google project switches
+it to the paid tier (no training use, but it costs money per request).
 
 ## Staying up
 
