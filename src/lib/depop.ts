@@ -75,6 +75,7 @@ export const HASHTAG_BANK = [
   "western", "loungewear", "minimalist", "preppy", "academia", "grandma", "workwear", "carpenter",
   "thermal", "cable", "knit", "vintage", "y2k", "90s", "striped", "retro", "baggy", "heavyweight",
   "outdoors", "hiking", "winter", "streetwear", "sportswear", "utility", "biker", "emo",
+  "granola", "chunky", "americana",
 ] as const;
 export type Hashtag = (typeof HASHTAG_BANK)[number];
 const BANK = new Set<string>(HASHTAG_BANK);
