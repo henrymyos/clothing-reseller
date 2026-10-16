@@ -94,3 +94,38 @@ export type AnalyzeResponse = Analysis & {
   notices?: string[]; // anything SnapList had to work around (backup model, search down…), shown to her
   photoCount: number;
 };
+
+// Array length limits in analysisSchema. Direct Gemini's structured output can't be
+// told an array's length (the Google provider drops minItems/maxItems when it converts
+// the schema), so an over-long list would fail validation and waste the whole call.
+const ANALYSIS_ARRAY_MAX: Partial<Record<keyof Analysis, number>> = {
+  distinctiveFeatures: 5,
+  visibleFlaws: 6,
+  colors: 2,
+  styles: 3,
+  hashtags: 5,
+};
+
+/**
+ * generateObject repair hook: if the model's JSON only broke the array length limits,
+ * trim the lists and let validation run again. Returns null (no repair) otherwise.
+ */
+export async function trimAnalysisArrays({ text }: { text: string }): Promise<string | null> {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const obj = data as Record<string, unknown>;
+  let changed = false;
+  for (const [key, max] of Object.entries(ANALYSIS_ARRAY_MAX)) {
+    const v = obj[key];
+    if (Array.isArray(v) && v.length > (max as number)) {
+      obj[key] = v.slice(0, max);
+      changed = true;
+    }
+  }
+  return changed ? JSON.stringify(obj) : null;
+}

@@ -1,16 +1,26 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { friendlyError, modelNotice, searchNotice } from "@/lib/notices";
 import { searchStatus } from "@/lib/comps";
 import { clearedMessage } from "@/lib/savedFlag";
-import { FALLBACK_MODELS, PRIMARY_MODEL } from "@/lib/model";
+import { DIRECT_MODEL_IDS, FALLBACK_MODELS, PRIMARY_MODEL } from "@/lib/model";
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe("model notice", () => {
   it("stays quiet on the usual models", () => {
+    vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "");
     expect(modelNotice([FALLBACK_MODELS[0], FALLBACK_MODELS[0]])).toBeNull();
     expect(modelNotice([PRIMARY_MODEL])).toBeNull();
   });
   it("says when a backup wrote the listing", () => {
+    vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "");
     expect(modelNotice([FALLBACK_MODELS[1], FALLBACK_MODELS[0]])).toMatch(/backup \(GPT-5 nano\) wrote this listing/);
+  });
+  it("with the Google key, direct Gemini is usual and the gateway is the backup", () => {
+    vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "test-key-not-real");
+    expect(modelNotice([DIRECT_MODEL_IDS[0], DIRECT_MODEL_IDS[1]])).toBeNull();
+    expect(modelNotice([DIRECT_MODEL_IDS[0], FALLBACK_MODELS[0]])).toMatch(/backup \(Gemini Flash Lite via Vercel\) wrote this listing/);
+    expect(modelNotice([PRIMARY_MODEL])).toMatch(/backup \(Claude Haiku\)/);
   });
 });
 
@@ -44,10 +54,15 @@ describe("search error reasons", () => {
 
 describe("whole-analysis errors", () => {
   it("are written for her, not as raw API errors", () => {
+    vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "");
     expect(friendlyError(new Error("Insufficient credits on your AI Gateway account"))).toMatch(/used up its free credits/);
     expect(friendlyError(new Error("Rate limit exceeded"))).toMatch(/busy right now/);
     expect(friendlyError(new Error("Model not found"))).toMatch(/aren't responding/);
     expect(friendlyError(new Error("Invalid image: unsupported format"))).toMatch(/Invalid image/);
+  });
+  it("name Google's daily free limit when the Google key is set", () => {
+    vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "test-key-not-real");
+    expect(friendlyError(new Error("Insufficient credits on your AI Gateway account"))).toMatch(/today's free Google requests.*reset overnight/);
   });
 });
 

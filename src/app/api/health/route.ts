@@ -1,28 +1,35 @@
 import { generateText } from "ai";
 import Exa from "exa-js";
 import { NextResponse } from "next/server";
-import { withModelFallback } from "@/lib/model";
+import { directGeminiEnabled, isDirectModel, withModelFallback } from "@/lib/model";
 import { parseDepopResult } from "@/lib/comps";
 
 // End-to-end check for the uptime monitor: can the app still (1) get an answer
-// from an AI model, (2) search Depop through Exa, and (3) read Depop's listing
-// format? Each failure here would quietly break listings or prices, so the
-// monitor opens an issue on a 503. The CDN caches a healthy answer for 12 hours,
-// so hourly monitoring costs about two real checks a day.
+// from an AI model (direct Gemini first if the Google key is set, else the gateway),
+// (2) search Depop through Exa, and (3) read Depop's listing format? Each failure
+// here would quietly break listings or prices, so the monitor opens an issue on a 503.
+// The CDN caches a healthy answer for 12 hours, so hourly monitoring costs about two
+// real checks a day.
 export const maxDuration = 60;
 
 type Check = { ok: boolean; detail: string };
 
-async function checkAi(): Promise<Check> {
+// Which route answered: direct Gemini (free Google key) when GOOGLE_GENERATIVE_AI_API_KEY
+// is set, else the Vercel AI Gateway. If the key is set but a gateway model had to
+// answer, direct Gemini is failing — the check still passes (listings work) but says so.
+async function checkAi(): Promise<Check & { route: "google-direct" | "gateway" | "none"; googleKey: boolean }> {
+  const googleKey = directGeminiEnabled();
   try {
     let used = "";
     const { text } = await withModelFallback(
-      (model, abortSignal) => { used = model; return generateText({ model, abortSignal, maxRetries: 0, prompt: "Reply with the single word OK." }); },
+      (model, abortSignal, id) => { used = id; return generateText({ model, abortSignal, maxRetries: 0, prompt: "Reply with the single word OK." }); },
       { timeoutMs: 20_000 },
     );
-    return { ok: /ok/i.test(text), detail: `${used}: ${text.trim().slice(0, 20)}` };
+    const route = isDirectModel(used) ? "google-direct" : "gateway";
+    const note = googleKey && route === "gateway" ? " (direct Gemini failed; the AI Gateway backup answered)" : "";
+    return { ok: /ok/i.test(text), route, googleKey, detail: `${used}: ${text.trim().slice(0, 20)}${note}` };
   } catch (e) {
-    return { ok: false, detail: e instanceof Error ? e.message.slice(0, 200) : "AI call failed" };
+    return { ok: false, route: "none", googleKey, detail: e instanceof Error ? e.message.slice(0, 200) : "AI call failed" };
   }
 }
 

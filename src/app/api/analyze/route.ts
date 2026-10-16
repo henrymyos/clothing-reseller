@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { NextRequest, NextResponse } from "next/server";
-import { analysisSchema, pricingSchema, type AnalyzeResponse } from "@/lib/schema";
+import { analysisSchema, pricingSchema, trimAnalysisArrays, type AnalyzeResponse } from "@/lib/schema";
 import { getDepopComps, type SearchStatus } from "@/lib/comps";
 import { withModelFallback } from "@/lib/model";
 import { clientIp, rateLimited } from "@/lib/rateLimit";
@@ -53,7 +53,11 @@ export async function POST(req: NextRequest) {
       generateObject({
         model,
         abortSignal,
+        // withModelFallback does its own quick retry and fall-through; the SDK's built-in
+        // retries would otherwise run first and slow down moving past a free-tier 429.
+        maxRetries: 0,
         schema: analysisSchema,
+        experimental_repairText: trimAnalysisArrays,
         system: SYSTEM_PROMPT,
         temperature: 0.2,
         messages: [

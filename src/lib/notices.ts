@@ -1,19 +1,24 @@
 // Plain messages for her when SnapList had to work around something, so nothing
 // changes silently: a backup AI model, a broken Depop search, a skipped price
 // check, or the AI being unavailable altogether.
-import { issueKind, USUAL_MODELS } from "@/lib/model";
+import { directGeminiEnabled, issueKind, usualModels } from "@/lib/model";
 import type { SearchStatus } from "@/lib/comps";
 
+// Direct Gemini (her own free Google key) and the Vercel AI Gateway can both run a
+// Gemini Flash Lite, so the names say which route it was.
 const NAMES: Record<string, string> = {
+  "google-direct/gemini-2.5-flash-lite": "Gemini Flash Lite, direct from Google",
+  "google-direct/gemini-2.5-flash": "Gemini Flash, direct from Google",
   "anthropic/claude-haiku-4-5": "Claude Haiku",
-  "google/gemini-2.5-flash-lite": "Gemini Flash Lite",
+  "google/gemini-2.5-flash-lite": "Gemini Flash Lite via Vercel",
   "openai/gpt-5-nano": "GPT-5 nano",
   "google/gemini-3.1-flash-lite": "Gemini 3.1 Flash Lite",
 };
 export const modelName = (id: string) => NAMES[id] ?? id;
 
 export function modelNotice(used: string[]): string | null {
-  const backups = [...new Set(used.filter((m) => !USUAL_MODELS.includes(m)))];
+  const usual = usualModels();
+  const backups = [...new Set(used.filter((m) => !usual.includes(m)))];
   if (!backups.length) return null;
   return `The usual AI model isn't responding, so a backup (${backups.map(modelName).join(", ")}) wrote this listing. Double-check the details before posting. If you keep seeing this, let Henry know.`;
 }
@@ -41,7 +46,10 @@ export const PRICE_CHECK_SKIPPED =
 // Turn a failure of the whole analysis into something she can act on.
 export function friendlyError(e: unknown): string {
   const kind = issueKind(e);
-  if (kind === "tier") return "SnapList's AI has used up its free credits for now, so it can't write listings. Let Henry know — he can add credits in Vercel.";
+  if (kind === "tier")
+    return directGeminiEnabled()
+      ? "SnapList's AI has used up today's free Google requests and the Vercel backup is out of credits, so it can't write listings right now. Google's free requests reset overnight (midnight Pacific); if it's still stuck tomorrow, let Henry know."
+      : "SnapList's AI has used up its free credits for now, so it can't write listings. Let Henry know — he can add credits in Vercel or set up the free Google key.";
   if (kind === "rate") return "The AI is busy right now. Wait a minute and try again.";
   if (kind === "slow" || kind === "down") return "The AI models aren't responding right now. Try again in a few minutes; if it keeps happening, let Henry know.";
   const msg = e instanceof Error ? e.message : "";
