@@ -18,6 +18,7 @@ import { clearedMessage, whatWasCleared } from "@/lib/savedFlag";
 import { StyledPhotos } from "@/components/StyledPhotos";
 import type { PromptItem } from "@/lib/stylePrompts";
 import { PhotoError, photoErrorMessage, preparePhoto } from "@/lib/heic";
+import { resizeImage } from "@/lib/resizeImage";
 
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
@@ -577,28 +578,3 @@ function FeeInput({ label, value, onChange }: { label: string; value: number; on
   );
 }
 
-// Resize a picked image to fit within maxDim and re-encode as JPEG to keep the upload small.
-// Rejects when the browser can't decode it (e.g. HEIC outside Safari); preparePhoto handles that.
-function resizeImage(file: Blob, maxDim: number, quality: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { naturalWidth: width, naturalHeight: height } = img;
-      if (!width || !height) return reject(new Error("Empty image"));
-      const scale = Math.min(1, maxDim / Math.max(width, height));
-      width = Math.round(width * scale);
-      height = Math.round(height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return reject(new Error("Canvas unavailable"));
-      ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL("image/jpeg", quality));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not load image")); };
-    img.src = url;
-  });
-}
