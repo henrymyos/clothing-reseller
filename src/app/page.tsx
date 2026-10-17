@@ -17,6 +17,7 @@ import { readSales, type SalesStore } from "@/lib/salesStore";
 import { clearedMessage, whatWasCleared } from "@/lib/savedFlag";
 import { StyledPhotos } from "@/components/StyledPhotos";
 import type { PromptItem } from "@/lib/stylePrompts";
+import { PhotoError, photoErrorMessage, preparePhoto } from "@/lib/heic";
 
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
@@ -49,6 +50,7 @@ export default function Home() {
   const [runId, setRunId] = useState(0); // remounts the results (and their profit inputs) per analysis
   const [sales, setSales] = useState<SalesStore | null>(null);
   const [inventory, setInventory] = useState<InvItem[]>([]);
+  const [preparing, setPreparing] = useState(false); // resizing / converting picked photos
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [cleared, setCleared] = useState<string | null>(null);
@@ -68,11 +70,25 @@ export default function Home() {
     const room = MAX_PHOTOS - photos.length;
     const picked = Array.from(files).slice(0, Math.max(0, room));
     const out: string[] = [];
-    for (const f of picked) {
-      try { out.push(await resizeImage(f, 900, 0.82)); } catch { /* skip unreadable files */ }
+    const failed: PhotoError[] = [];
+    setPreparing(true);
+    try {
+      for (const f of picked) {
+        try {
+          out.push(await preparePhoto(f, (img) => resizeImage(img, 900, 0.82)));
+        } catch (err) {
+          failed.push(err instanceof PhotoError ? err : new PhotoError("unreadable", f.name));
+        }
+      }
+    } finally {
+      setPreparing(false);
     }
     if (out.length) setPhotos((p) => [...p, ...out].slice(0, MAX_PHOTOS));
-    if (files.length > room) setError(`Up to ${MAX_PHOTOS} photos — the extra ones were skipped.`);
+    const messages = [
+      photoErrorMessage(failed),
+      files.length > room ? `Up to ${MAX_PHOTOS} photos — the extra ones were skipped.` : null,
+    ].filter(Boolean);
+    setError(messages.length ? messages.join(" ") : null);
   }
 
   async function analyze() {
@@ -144,10 +160,13 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                disabled={preparing}
                 className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-line-strong bg-cream px-2 text-center text-muted transition hover:border-cherry/60 hover:bg-blush/40"
               >
-                <span className="text-3xl">📷</span>
-                <span className="mt-1 text-xs">{photos.length === 0 ? "Add photos" : `Add ${PHOTO_HINTS[photos.length] ?? "photo"}`}</span>
+                <span className="text-3xl">{preparing ? "⏳" : "📷"}</span>
+                <span className="mt-1 text-xs" aria-live="polite">
+                  {preparing ? "Preparing photos…" : photos.length === 0 ? "Add photos" : `Add ${PHOTO_HINTS[photos.length] ?? "photo"}`}
+                </span>
               </button>
             )}
           </div>
@@ -157,7 +176,7 @@ export default function Home() {
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,.heic,.heif"
             multiple
             className="hidden"
             onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ""; }}
@@ -178,7 +197,7 @@ export default function Home() {
             )}
             <button
               onClick={analyze}
-              disabled={!photos.length || status === "loading"}
+              disabled={!photos.length || preparing || status === "loading"}
               className="flex-1 rounded-xl bg-cherry py-3 font-semibold text-white shadow-sm shadow-cherry/30 transition hover:bg-cherry-dark disabled:opacity-40 disabled:shadow-none"
             >
               {status === "loading" ? "Analyzing…" : result ? "Re-analyze" : "Analyze"}
@@ -559,13 +578,15 @@ function FeeInput({ label, value, onChange }: { label: string; value: number; on
 }
 
 // Resize a picked image to fit within maxDim and re-encode as JPEG to keep the upload small.
-function resizeImage(file: File, maxDim: number, quality: number): Promise<string> {
+// Rejects when the browser can't decode it (e.g. HEIC outside Safari); preparePhoto handles that.
+function resizeImage(file: Blob, maxDim: number, quality: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
       URL.revokeObjectURL(url);
-      let { width, height } = img;
+      let { naturalWidth: width, naturalHeight: height } = img;
+      if (!width || !height) return reject(new Error("Empty image"));
       const scale = Math.min(1, maxDim / Math.max(width, height));
       width = Math.round(width * scale);
       height = Math.round(height * scale);

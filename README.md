@@ -20,7 +20,8 @@ npm test                     # unit tests (vitest)
 ## How it works
 
 1. **Photos** (`src/app/page.tsx`): up to 6 — front, back, brand/size tag, care tag, flaws.
-   Resized in the browser before upload.
+   Resized in the browser before upload. iPhone HEIC photos that the browser can't draw (anything
+   but Safari) are converted to JPEG first with `heic-to` (`src/lib/heic.ts`), loaded only when needed.
 2. **Analysis** (`src/app/api/analyze/route.ts`, `src/lib/schema.ts`): one vision call reads
    every photo and fills in Depop's fields (department, category, size, condition, colours,
    styles, age, source, material), visible flaws, weight, and search queries. A size "from
