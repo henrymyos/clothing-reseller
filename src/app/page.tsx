@@ -274,6 +274,8 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
           <p className="mt-2 inline-block rounded-full bg-sage-soft px-2.5 py-0.5 text-xs font-semibold text-sage">
             ✓ {result.priceBasis === "comps" ? "Based on" : "Checked against"} {result.comps.sampleSize} matching Depop listings (median ${result.comps.median})
           </p>
+        ) : result.compsNote ? (
+          <p className="mt-2 text-xs text-muted">{result.compsNote}</p>
         ) : result.priceBasis === "mine" || result.priceBasis === "family" ? (
           <p className="mt-2 text-xs text-muted">No close Depop listings to compare against, so this comes from your own sales.</p>
         ) : (

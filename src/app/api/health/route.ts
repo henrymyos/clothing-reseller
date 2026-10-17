@@ -3,16 +3,17 @@ import Exa from "exa-js";
 import { NextResponse } from "next/server";
 import { directGeminiEnabled, isDirectModel, withModelFallback } from "@/lib/model";
 import { parseDepopResult } from "@/lib/comps";
+import { summarizeHealth, type Check } from "@/lib/health";
 
 // End-to-end check for the uptime monitor: can the app still (1) get an answer
 // from an AI model (direct Gemini first if the Google key is set, else the gateway),
 // (2) search Depop through Exa, and (3) read Depop's listing format? Each failure
-// here would quietly break listings or prices, so the monitor opens an issue on a 503.
-// The CDN caches a healthy answer for 12 hours, so hourly monitoring costs about two
-// real checks a day.
+// of (1) means no listings, so it's a 503 and the monitor opens an issue. (2) and (3)
+// only feed price comps — listings still get written without them — so they come back
+// as HTTP 200 with ok:true and degraded:["exa"] (or ["depop"]) instead of an alert.
+// The CDN caches a healthy answer for 12 hours (about two real checks a day) and a
+// degraded one for an hour (lib/health.ts).
 export const maxDuration = 60;
-
-type Check = { ok: boolean; detail: string };
 
 // Which route answered: direct Gemini (free Google key) when GOOGLE_GENERATIVE_AI_API_KEY
 // is set, else the Vercel AI Gateway. If the key is set but a gateway model had to
@@ -35,7 +36,7 @@ async function checkAi(): Promise<Check & { route: "google-direct" | "gateway" |
 
 async function checkDepopSearch(): Promise<{ exa: Check; depop: Check }> {
   const key = process.env.EXA_API_KEY;
-  if (!key) return { exa: { ok: false, detail: "EXA_API_KEY missing" }, depop: { ok: false, detail: "not checked" } };
+  if (!key) return { exa: { ok: false, detail: "EXA_API_KEY missing" }, depop: { ok: false, skipped: true, detail: "not checked" } };
   try {
     const res = await new Exa(key).search("gildan hoodie", {
       numResults: 10, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } },
@@ -48,16 +49,16 @@ async function checkDepopSearch(): Promise<{ exa: Check; depop: Check }> {
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message.slice(0, 200) : "Exa search failed";
-    return { exa: { ok: false, detail: msg }, depop: { ok: false, detail: "not checked" } };
+    return { exa: { ok: false, detail: msg }, depop: { ok: false, skipped: true, detail: "not checked" } };
   }
 }
 
 export async function GET() {
   const [ai, search] = await Promise.all([checkAi(), checkDepopSearch()]);
   const checks = { ai, ...search };
-  const ok = Object.values(checks).every((c) => c.ok);
+  const { ok, degraded, status, cacheControl } = summarizeHealth(checks);
   return NextResponse.json(
-    { ok, checkedAt: new Date().toISOString(), checks },
-    { status: ok ? 200 : 503, headers: { "cache-control": ok ? "public, s-maxage=43200, stale-while-revalidate=3600" : "no-store" } },
+    { ok, degraded, checkedAt: new Date().toISOString(), checks },
+    { status, headers: { "cache-control": cacheControl } },
   );
 }

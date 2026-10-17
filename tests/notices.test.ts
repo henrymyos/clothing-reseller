@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { friendlyError, modelNotice, searchNotice } from "@/lib/notices";
+import { compsNote, friendlyError, modelNotice, searchNotice } from "@/lib/notices";
 import { searchStatus } from "@/lib/comps";
 import { clearedMessage } from "@/lib/savedFlag";
 import { DIRECT_MODEL_IDS, FALLBACK_MODELS, PRIMARY_MODEL } from "@/lib/model";
@@ -37,8 +37,20 @@ describe("Depop search status", () => {
   it("explains what the price fell back to", () => {
     expect(searchNotice({ state: "ok" }, true)).toBeNull();
     expect(searchNotice({ state: "no-matches" }, true)).toBeNull();
-    expect(searchNotice({ state: "failed", detail: "402 out of credits" }, true)).toMatch(/isn't working right now \(it's out of credits\), so the price is based on your own sales only/);
+    // A search that's down is a small price-card note, not a banner.
+    expect(searchNotice({ state: "failed", detail: "402 out of credits" }, true)).toBeNull();
     expect(searchNotice({ state: "unreadable" }, false)).toMatch(/Depop may have changed its pages.*estimate from the photos/);
+  });
+});
+
+describe("comps note", () => {
+  it("only appears when the search is down, and says what the price used", () => {
+    expect(compsNote({ state: "ok" }, false)).toBeNull();
+    expect(compsNote({ state: "no-matches" }, false)).toBeNull();
+    expect(compsNote({ state: "unreadable" }, false)).toBeNull();
+    expect(compsNote({ state: "failed", detail: "You have exceeded your credits limit" }, false))
+      .toBe("Depop price comps unavailable right now (it's out of credits), so this is an estimate from the photos. Check Depop before pricing.");
+    expect(compsNote({ state: "failed", detail: "fetch failed" }, true)).toMatch(/\(it isn't responding\), so this comes from your own sales\.$/);
   });
 });
 

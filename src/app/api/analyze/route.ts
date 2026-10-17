@@ -7,7 +7,7 @@ import { clientIp, rateLimited } from "@/lib/rateLimit";
 import { HASHTAG_BANK, enrichHeadline, insertKeywords, overflowKeywords, pickHashtags, rankKeywords } from "@/lib/depop";
 import { cleanSales, matchMySales } from "@/lib/sales";
 import { explainPrice, finalPrice, priceAnchor, type PriceBasis } from "@/lib/pricing";
-import { PRICE_CHECK_SKIPPED, friendlyError, modelNotice, searchNotice } from "@/lib/notices";
+import { PRICE_CHECK_SKIPPED, compsNote, friendlyError, modelNotice, searchNotice } from "@/lib/notices";
 
 export const maxDuration = 60;
 
@@ -113,6 +113,7 @@ export async function POST(req: NextRequest) {
     const hasMine = !!mySales && (mySales.matches.length > 0 || mySales.familyMedian != null);
     const searchMsg = searchNotice(search, hasMine);
     if (searchMsg) notices.push(searchMsg);
+    const compsMsg = compsNote(search, hasMine);
 
     // 4. Re-price on her sales + the matched Depop listings.
     let priceBasis: PriceBasis = "photos";
@@ -175,7 +176,7 @@ Return the final range and suggested price in USD, citing her sales when they ex
 
     const modelMsg = modelNotice(modelsUsed);
     if (modelMsg) notices.unshift(modelMsg);
-    const response: AnalyzeResponse = { ...analysis, hashtags, comps, mySales: hasMine ? mySales : null, priceBasis, notices, photoCount: images.length };
+    const response: AnalyzeResponse = { ...analysis, hashtags, comps, mySales: hasMine ? mySales : null, priceBasis, notices, compsNote: compsMsg, photoCount: images.length };
     return NextResponse.json(response);
   } catch (err) {
     console.error("Analyze error:", err);

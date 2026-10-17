@@ -132,13 +132,17 @@ stores nothing for this; the templates are in `src/lib/stylePrompts.ts` (tests i
 
 ## Staying up
 
-- `/api/health` checks the AI models, Exa's Depop search and Depop's listing format; it answers
-  503 with details if any fail. The project-hub uptime workflow checks it hourly (cached 12h on
-  the CDN, so about two real checks a day) and opens a GitHub issue on failure.
+- `/api/health` checks the AI models, Exa's Depop search and Depop's listing format. Only the AI
+  is core: if it fails the endpoint answers 503 with details. If only the Depop search or parsing
+  fails (e.g. Exa out of credits) listings still work, so it answers 200 with `ok: true` and
+  `degraded: ["exa"]` (or `["depop"]`) and no alert (`src/lib/health.ts`). The project-hub uptime
+  workflow checks it hourly (healthy answers cached 12h on the CDN, degraded ones 1h) and opens a
+  GitHub issue on a 503.
 - `/api/analyze` is limited to 60 items per IP per hour so a bot can't drain the free credits.
 - Nothing degrades silently (`src/lib/notices.ts`): a "Heads up" box on the listing says when a
-  backup AI model wrote it, when the Depop search failed or Depop's pages couldn't be read (and
-  what the price fell back to), or when the AI price check was skipped; whole-analysis failures
+  backup AI model wrote it, when Depop's pages couldn't be read (and what the price fell back to),
+  or when the AI price check was skipped. A Depop search that's down (out of credits, broken key)
+  is a small "Depop price comps unavailable" note on the price card instead; whole-analysis failures
   explain themselves (out of credits, busy, not responding). If the browser wipes her saved
   sheet/sales, both pages say so — `/api/remember` keeps a server-set cookie recording that
   data was loaded (never the data), which Safari's 7-day cleanup doesn't touch.

@@ -92,7 +92,8 @@ export type AnalyzeResponse = Analysis & {
   comps: Comps | null;
   mySales: import("@/lib/sales").MySales | null;
   priceBasis?: import("@/lib/pricing").PriceBasis; // what the price is anchored on
-  notices?: string[]; // anything SnapList had to work around (backup model, search down…), shown to her
+  notices?: string[]; // anything SnapList had to work around (backup model, unreadable Depop pages…), shown to her
+  compsNote?: string | null; // the Depop price search is down: a small note on the price card, not a banner
   photoCount: number;
 };
 

@@ -33,11 +33,21 @@ export function searchReason(detail: string): string {
   return "it returned an error";
 }
 
+// A search that's down (out of credits, key broken, not responding) isn't a problem
+// with this listing — it's still written and priced from her sales or the photos — so
+// it gets a small note on the price card (compsNote) instead of a "Heads up" banner.
+// Found-but-unreadable listings are different: Depop changed its pages and Henry has
+// to fix the parser, so that one stays a banner.
 export function searchNotice(s: SearchStatus, hasOwnSales: boolean): string | null {
   const fallback = hasOwnSales ? "so the price is based on your own sales only" : "so the price is only an estimate from the photos — check Depop before pricing";
-  if (s.state === "failed") return `The Depop price search isn't working right now (${searchReason(s.detail)}), ${fallback}. If it keeps happening, let Henry know.`;
   if (s.state === "unreadable") return `SnapList found Depop listings but couldn't read them — Depop may have changed its pages — ${fallback}. Let Henry know.`;
   return null;
+}
+
+export function compsNote(s: SearchStatus, hasOwnSales: boolean): string | null {
+  if (s.state !== "failed") return null;
+  const basis = hasOwnSales ? "so this comes from your own sales" : "so this is an estimate from the photos. Check Depop before pricing";
+  return `Depop price comps unavailable right now (${searchReason(s.detail)}), ${basis}.`;
 }
 
 export const PRICE_CHECK_SKIPPED =
