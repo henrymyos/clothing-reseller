@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { explainPrice, finalPrice, priceAnchor } from "@/lib/pricing";
+import { explainPrice, finalPrice, parseManualComps, priceAnchor, repriceWithManual } from "@/lib/pricing";
 import type { MySales } from "@/lib/sales";
 import type { Comps } from "@/lib/schema";
 
@@ -58,6 +58,38 @@ describe("price anchor", () => {
     expect(p.high).toBeGreaterThanOrEqual(p.suggested);
     expect(finalPrice(2, 1, 3, a, "Used - Good").suggested).toBe(Math.round(12 * 0.7));
     expect(finalPrice(2, 1, 3, a, "Used - Fair").suggested).toBe(2);
+  });
+});
+
+describe("manual Depop comps", () => {
+  it("reads 2–5 positive prices, with or without $ signs", () => {
+    expect(parseManualComps("24, 30 $28.50")).toEqual({ prices: [24, 30, 28.5], error: null });
+    expect(parseManualComps("  ")).toEqual({ prices: [], error: null });
+  });
+  it("rejects bad input with a plain message and no prices", () => {
+    expect(parseManualComps("24")).toEqual({ prices: [], error: "Add at least 2 prices." });
+    expect(parseManualComps("1 2 3 4 5 6").error).toMatch(/Up to 5 prices/);
+    for (const bad of ["24, 0", "24, -5", "24, abc", "24, $x"]) {
+      expect(parseManualComps(bad).prices).toEqual([]);
+      expect(parseManualComps(bad).error).toMatch(/positive numbers/);
+    }
+  });
+  it("leads like her own sales: after 2+ matching sales, before the automatic listings", () => {
+    const many: Comps = { ...comps, sampleSize: 6, median: 10 };
+    expect(priceAnchor(null, many, [30, 20, 26])).toMatchObject({ basis: "manual", anchor: 26, band: [20, 26, 30], capMult: 1.2 });
+    expect(priceAnchor(mine([13, 15]), many, [30, 20])).toMatchObject({ basis: "mine" });
+    expect(priceAnchor(mine([], 13), null, [30, 20]).basis).toBe("manual");
+    expect(priceAnchor(null, many, [30]).basis).toBe("comps"); // one price isn't enough to lead
+  });
+  it("re-prices a finished analysis from the AI's own numbers", () => {
+    const r = { mySales: null, comps: null, visibleFlaws: [], condition: "Used - Good" as const, modelPrice: { suggested: 40, low: 30, high: 50 } };
+    const p = repriceWithManual(r, [20, 24, 28]);
+    expect(p).toMatchObject({ basis: "manual", suggested: Math.round(24 * 1.2), low: 22, high: 29 });
+    expect(p.reasoning).toBe("The 3 Depop prices you found ask $20–$28.");
+    expect(repriceWithManual(r, []).basis).toBe("photos");
+  });
+  it("cites her prices after her own sales", () => {
+    expect(explainPrice(mine([18]), null, [], "Used - Good", [20, 24])).toBe("You sold a similar one for $18; the 2 Depop prices you found ask $20–$24.");
   });
 });
 

@@ -1,6 +1,7 @@
 import Exa from "exa-js";
 import type { Analysis, CompListing, Comps } from "@/lib/schema";
 import { COLORS } from "@/lib/depop";
+import { quantile } from "@/lib/pricing";
 
 // Comparable Depop listings for pricing, with no AI in the loop: up to two
 // Exa searches of depop.com, then each result is read from the structured line
@@ -157,11 +158,8 @@ export function similarityFor(
   return brandOk ? 72 : 55; // same blank maker, different graphic = baseline; otherwise not comparable
 }
 
-export function quantile(sorted: number[], q: number): number {
-  const pos = (sorted.length - 1) * q;
-  const lo = Math.floor(pos), hi = Math.ceil(pos);
-  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
-}
+// quantile lives in pricing.ts so the listing page can re-price without pulling in Exa.
+export { quantile };
 
 // Drop prices outside 1.5×IQR (only with enough data to tell).
 export function trimOutliers<T extends { price: number }>(items: T[]): T[] {

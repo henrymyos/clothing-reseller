@@ -95,6 +95,7 @@ export type AnalyzeResponse = Analysis & {
   notices?: string[]; // anything SnapList had to work around (backup model, unreadable Depop pages…), shown to her
   compsNote?: string | null; // the Depop price search is down: a small note on the price card, not a banner
   photoCount: number;
+  modelPrice: { suggested: number; low: number; high: number }; // the AI's price before anchoring, so the page can re-price with comps she adds
 };
 
 // Array length limits in analysisSchema. Direct Gemini's structured output can't be

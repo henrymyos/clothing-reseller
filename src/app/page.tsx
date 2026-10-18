@@ -19,6 +19,7 @@ import { StyledPhotos } from "@/components/StyledPhotos";
 import type { PromptItem } from "@/lib/stylePrompts";
 import { PhotoError, photoErrorMessage, preparePhoto } from "@/lib/heic";
 import { resizeImage } from "@/lib/resizeImage";
+import { parseManualComps, repriceWithManual } from "@/lib/pricing";
 
 type Status = "idle" | "loading" | "done" | "error";
 const MAX_PHOTOS = 6;
@@ -228,6 +229,13 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
   const [sellerPaysShipping, setSellerPaysShipping] = useState(false);
   const [shippingCost, setShippingCost] = useState("");
   const [fees, setFees] = useState(DEFAULT_FEES);
+  // Depop prices she looked up herself; once applied they re-price like her own sales.
+  const [manualText, setManualText] = useState("");
+  const [manual, setManual] = useState<number[]>([]);
+  const parsedManual = parseManualComps(manualText);
+  const shown = manual.length ? repriceWithManual(result, manual) : { suggested: result.suggestedPrice, low: result.priceLow, high: result.priceHigh, basis: result.priceBasis, reasoning: result.priceReasoning };
+  const applyManual = () => { setManual(parsedManual.prices); set("price", String(repriceWithManual(result, parsedManual.prices).suggested)); };
+  const clearManual = () => { setManual([]); setManualText(""); set("price", String(result.suggestedPrice)); };
   const price = Number(draft.price) || 0;
   const money = profit({ price, cost: Number(cost) || 0, boosted, sellerPaysShipping, shippingCost: Number(shippingCost) || 0, fees });
   const shipOz = shippedWeightOz(Number(draft.weightOz) || 0);
@@ -257,30 +265,57 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
               aria-label="Listing price"
             />
           </div>
-          <p className="pb-1 text-sm text-muted">Suggested ${result.suggestedPrice} · range ${result.priceLow}–${result.priceHigh}</p>
+          <p className="pb-1 text-sm text-muted">Suggested ${shown.suggested} · range ${shown.low}–${shown.high}</p>
         </div>
-        <p className="mt-2 text-sm text-muted">{result.priceReasoning}</p>
+        <p className="mt-2 text-sm text-muted">{shown.reasoning}</p>
         {result.mySales && result.mySales.matches.length >= 2 && (
           <p className="mt-2 mr-2 inline-block rounded-full bg-blush px-2.5 py-0.5 text-xs font-semibold text-cherry">
             ★ Based on {result.mySales.matches.length} of your own sales (median ${result.mySales.matchedMedian})
           </p>
         )}
-        {result.priceBasis === "family" && result.mySales?.familyMedian != null && (
+        {manual.length > 0 && (
+          <p className="mt-2 mr-2 inline-block rounded-full bg-blush px-2.5 py-0.5 text-xs font-semibold text-cherry">
+            ★ {shown.basis === "manual" ? "Based on" : "Checked against"} {manual.length} Depop prices you found
+          </p>
+        )}
+        {shown.basis === "family" && result.mySales?.familyMedian != null && (
           <p className="mt-2 mr-2 inline-block rounded-full bg-blush px-2.5 py-0.5 text-xs font-semibold text-cherry">
             ★ Based on your typical ${result.mySales.familyMedian} for this kind of item ({result.mySales.familyCount} sales)
           </p>
         )}
         {result.comps ? (
           <p className="mt-2 inline-block rounded-full bg-sage-soft px-2.5 py-0.5 text-xs font-semibold text-sage">
-            ✓ {result.priceBasis === "comps" ? "Based on" : "Checked against"} {result.comps.sampleSize} matching Depop listings (median ${result.comps.median})
+            ✓ {shown.basis === "comps" ? "Based on" : "Checked against"} {result.comps.sampleSize} matching Depop listings (median ${result.comps.median})
           </p>
-        ) : result.compsNote ? (
+        ) : manual.length ? null /* the badge above says what the price is based on now */ : result.compsNote ? (
           <p className="mt-2 text-xs text-muted">{result.compsNote}</p>
         ) : result.priceBasis === "mine" || result.priceBasis === "family" ? (
           <p className="mt-2 text-xs text-muted">No close Depop listings to compare against, so this comes from your own sales.</p>
         ) : (
           <p className="mt-2 text-xs text-muted">Estimate from the photos — nothing of yours or on Depop close enough to ground it. Check Depop before pricing.</p>
         )}
+        {/* Open when the automatic Depop search found nothing, tucked away when it did. */}
+        <details open={!result.comps} className="mt-3 rounded-xl border border-line p-3 text-sm">
+          <summary className={`cursor-pointer font-medium ${result.comps ? "text-xs text-muted" : "text-cherry"}`}>
+            {result.comps ? "Add Depop prices you found" : "Found similar items on Depop? Add their prices"}
+          </summary>
+          <p className="mt-1 text-xs text-muted">Type 2–5 asking prices from close matches. They count like your own sales.</p>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={manualText} onChange={(e) => setManualText(e.target.value)} inputMode="decimal" placeholder="24, 30, 28"
+              className={input} aria-label="Depop prices you found" aria-invalid={!!parsedManual.error}
+              aria-describedby={parsedManual.error ? "manual-comps-error" : undefined}
+            />
+            <button type="button" onClick={applyManual} disabled={!parsedManual.prices.length}
+              className="shrink-0 rounded-lg bg-cherry px-3 py-1.5 text-sm font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark disabled:opacity-40">
+              Update price
+            </button>
+          </div>
+          {parsedManual.error && <p id="manual-comps-error" className="mt-1 text-xs text-cherry">{parsedManual.error}</p>}
+          {manual.length > 0 && (
+            <button type="button" onClick={clearManual} className="mt-1 text-xs text-muted underline hover:text-cherry">Remove these prices</button>
+          )}
+        </details>
       </Card>
 
       {result.mySales && <MySalesCard mine={result.mySales} />}

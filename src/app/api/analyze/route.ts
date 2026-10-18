@@ -117,6 +117,8 @@ export async function POST(req: NextRequest) {
 
     // 4. Re-price on her sales + the matched Depop listings.
     let priceBasis: PriceBasis = "photos";
+    // The AI's own numbers before anchoring; the page re-prices from these when she adds Depop prices.
+    let modelPrice = { suggested: analysis.suggestedPrice, low: analysis.priceLow, high: analysis.priceHigh };
     if (comps || hasMine) {
       try {
         const mineBlock = mySales && hasMine
@@ -151,6 +153,7 @@ Return the final range and suggested price in USD, citing her sales when they ex
         );
         const a = priceAnchor(mySales, comps);
         const p = finalPrice(pricing.suggestedPrice, pricing.priceLow, pricing.priceHigh, a, analysis.condition);
+        modelPrice = { suggested: pricing.suggestedPrice, low: pricing.priceLow, high: pricing.priceHigh };
         analysis.suggestedPrice = p.suggested;
         analysis.priceLow = p.low;
         analysis.priceHigh = p.high;
@@ -176,7 +179,7 @@ Return the final range and suggested price in USD, citing her sales when they ex
 
     const modelMsg = modelNotice(modelsUsed);
     if (modelMsg) notices.unshift(modelMsg);
-    const response: AnalyzeResponse = { ...analysis, hashtags, comps, mySales: hasMine ? mySales : null, priceBasis, notices, compsNote: compsMsg, photoCount: images.length };
+    const response: AnalyzeResponse = { ...analysis, hashtags, comps, mySales: hasMine ? mySales : null, priceBasis, notices, compsNote: compsMsg, photoCount: images.length, modelPrice };
     return NextResponse.json(response);
   } catch (err) {
     console.error("Analyze error:", err);

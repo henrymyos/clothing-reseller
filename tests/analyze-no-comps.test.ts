@@ -48,6 +48,12 @@ describe("analyze with the Depop search out of credits", () => {
     expect(body.compsNote).toMatch(/^Depop price comps unavailable right now \(it's out of credits\)/);
     expect(body.notices).toEqual([]);
     expect(body.error).toBeUndefined();
+    // The AI's pre-anchor price comes back so the page can re-price with prices she finds.
+    expect(body.modelPrice).toEqual({ suggested: 22, low: 18, high: 26 });
+    const { repriceWithManual } = await import("@/lib/pricing");
+    const p = repriceWithManual(body, [40, 48, 44]);
+    // The photo guess ($22) is lifted to the floor of her prices (70% of the $44 median).
+    expect(p).toEqual({ basis: "manual", suggested: 31, low: 31, high: 46, reasoning: "The 3 Depop prices you found ask $40–$48." });
   });
 
   it("uses her own sales for the price note when she has them", async () => {
