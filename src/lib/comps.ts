@@ -2,7 +2,7 @@ import Exa from "exa-js";
 import type { Analysis, CompListing, Comps } from "@/lib/schema";
 import { COLORS } from "@/lib/depop";
 
-// Comparable Depop listings for pricing, with no AI in the loop: up to three
+// Comparable Depop listings for pricing, with no AI in the loop: up to two
 // Exa searches of depop.com, then each result is read from the structured line
 // Depop puts on every product page —
 //   "# Carhartt Men's Tan and Brown Jacket 10% off $36.90 $41.00 Size S Good condition"
@@ -230,25 +230,46 @@ export function searchStatus(o: { hasKey: boolean; errors: string[]; queries: nu
   return o.kept ? { state: "ok" } : { state: "no-matches" };
 }
 
+// Exa bills per search and per result, so: 10 results (the base price covers 10
+// with text), at most 2 queries per listing, and each query's results are kept
+// for a day. Only successful searches are cached, so a credits error retries.
+const NUM_RESULTS = 10;
+const MAX_QUERIES = 2;
+const CACHE_MS = 24 * 60 * 60 * 1000;
+type ExaResult = { url: string; title: string; text: string };
+// shortcut: in-memory per server instance (like rateLimit.ts), so a cold start or another
+// instance searches again; move to Vercel Runtime Cache if Exa spend still matters.
+const cache = new Map<string, { at: number; results: ExaResult[] }>();
+
+async function searchDepop(exa: Exa, q: string): Promise<ExaResult[]> {
+  const now = Date.now();
+  const hit = cache.get(q);
+  if (hit && now - hit.at < CACHE_MS) return hit.results;
+  const res = await exa.search(q, { numResults: NUM_RESULTS, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } } });
+  const results = (res.results ?? []).map((r) => ({ url: r.url, title: r.title ?? "", text: "text" in r && typeof r.text === "string" ? r.text : "" }));
+  cache.delete(q); // re-insert so Map order stays oldest-first for eviction
+  cache.set(q, { at: now, results });
+  if (cache.size > 500) cache.delete(cache.keys().next().value!);
+  return results;
+}
+
 export async function getDepopComps(a: Analysis): Promise<{ comps: Comps | null; search: SearchStatus }> {
   const apiKey = process.env.EXA_API_KEY;
   if (!apiKey) return { comps: null, search: searchStatus({ hasKey: false, errors: [], queries: 0, results: 0, parsed: 0, kept: false }) };
   const exa = new Exa(apiKey);
-  // Exact, broader, and brand + type as a safety net (the model's queries vary run to run).
+  // Exact, then broader; brand + type only fills in when those two collapse into one.
   const brandType = /^(unknown|unbranded)$/i.test(a.brand.trim()) ? "" : `${a.brand} ${a.itemType}`;
-  const queries = [...new Set([a.searchQuery, a.searchQueryBroad, brandType].map((q) => q.trim().toLowerCase()).filter(Boolean))];
-  const settled = await Promise.allSettled(
-    queries.map((q) => exa.search(q, { numResults: 25, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } } }))
-  );
+  const queries = [...new Set([a.searchQuery, a.searchQueryBroad, brandType].map((q) => q.trim().toLowerCase().replace(/\s+/g, " ")).filter(Boolean))].slice(0, MAX_QUERIES);
+  const settled = await Promise.allSettled(queries.map((q) => searchDepop(exa, q)));
   const parsed: ParsedListing[] = [];
   const errors: string[] = [];
   let results = 0;
   for (const s of settled) {
     if (s.status !== "fulfilled") { errors.push(s.reason instanceof Error ? s.reason.message.slice(0, 160) : "search failed"); continue; }
-    for (const r of s.value.results ?? []) {
+    for (const r of s.value) {
       if (!/depop\.com\/products\//.test(r.url)) continue;
       results += 1;
-      const p = parseDepopResult({ url: r.url, title: r.title ?? "", text: "text" in r && typeof r.text === "string" ? r.text : "" });
+      const p = parseDepopResult(r);
       if (p) parsed.push(p);
     }
   }
