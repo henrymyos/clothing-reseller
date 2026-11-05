@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { stubExaFetch } from "./helpers/exaFetch";
 import type { Analysis } from "@/lib/schema";
-import { getDepopComps } from "@/lib/comps";
+import { exaSearchDepop, getDepopComps } from "@/lib/comps";
 
 // Exa cost trim: 10 results, at most 2 queries, a 24 h per-query cache. Exa is mocked.
 const exaSearch = vi.fn();
-vi.mock("exa-js", () => ({ default: class { search = exaSearch; } }));
+const fetchMock = stubExaFetch(exaSearch);
 
 const result = (i: number) => ({
   url: `https://www.depop.com/products/seller-item-${i}/`,
@@ -69,5 +70,18 @@ describe("getDepopComps Exa usage", () => {
     // Only the query that failed is searched again; the other comes from the cache.
     expect(exaSearch).toHaveBeenCalledTimes(3);
     expect(exaSearch.mock.calls[2][0]).toBe("gildan fail hoodie");
+  });
+
+  it("posts the key header and Depop-only options, and reads both Exa error shapes", async () => {
+    const rows = await exaSearchDepop("k1", "gildan hoodie");
+    const [url, init] = fetchMock.mock.calls.at(-1)!;
+    expect(url).toBe("https://api.exa.ai/search");
+    expect((init.headers as Record<string, string>)["x-api-key"]).toBe("k1");
+    expect(JSON.parse(String(init.body))).toEqual({ query: "gildan hoodie", numResults: 10, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } } });
+    expect(rows[0]).toEqual(result(1));
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { message: "Invalid API key" } }, { status: 401 }));
+    await expect(exaSearchDepop("bad", "q")).rejects.toThrow("Invalid API key");
+    fetchMock.mockResolvedValueOnce(new Response("upstream down", { status: 503 }));
+    await expect(exaSearchDepop("k1", "q")).rejects.toThrow("HTTP 503");
   });
 });

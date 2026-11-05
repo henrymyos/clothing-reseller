@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { stubExaFetch } from "./helpers/exaFetch";
 import { NextRequest } from "next/server";
 import type { Analysis } from "@/lib/schema";
 
@@ -6,7 +7,7 @@ import type { Analysis } from "@/lib/schema";
 // No real AI or Exa calls: both are mocked.
 const exaSearch = vi.fn();
 const generateObject = vi.fn();
-vi.mock("exa-js", () => ({ default: class { search = exaSearch; } }));
+stubExaFetch(exaSearch);
 vi.mock("ai", async (orig) => ({ ...(await orig<typeof import("ai")>()), generateObject }));
 
 const analysis: Analysis = {

@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { stubExaFetch } from "./helpers/exaFetch";
 import { summarizeHealth } from "@/lib/health";
 
 // No real AI or Exa calls: both are mocked. Exa fails the way it does when credits run out.
 const exaSearch = vi.fn();
 const generateText = vi.fn();
-vi.mock("exa-js", () => ({ default: class { search = exaSearch; } }));
+stubExaFetch(exaSearch);
 vi.mock("ai", async (orig) => ({ ...(await orig<typeof import("ai")>()), generateText }));
 
 const up = { ok: true, detail: "fine" };

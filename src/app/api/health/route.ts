@@ -1,8 +1,7 @@
 import { generateText } from "ai";
-import Exa from "exa-js";
 import { NextResponse } from "next/server";
 import { directGeminiEnabled, isDirectModel, withModelFallback } from "@/lib/model";
-import { parseDepopResult } from "@/lib/comps";
+import { exaSearchDepop, parseDepopResult } from "@/lib/comps";
 import { summarizeHealth, type Check } from "@/lib/health";
 
 // End-to-end check for the uptime monitor: can the app still (1) get an answer
@@ -38,11 +37,8 @@ async function checkDepopSearch(): Promise<{ exa: Check; depop: Check }> {
   const key = process.env.EXA_API_KEY;
   if (!key) return { exa: { ok: false, detail: "EXA_API_KEY missing" }, depop: { ok: false, skipped: true, detail: "not checked" } };
   try {
-    const res = await new Exa(key).search("gildan hoodie", {
-      numResults: 10, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } },
-    });
-    const products = (res.results ?? []).filter((r) => /depop\.com\/products\//.test(r.url));
-    const parsed = products.filter((r) => parseDepopResult({ url: r.url, title: r.title ?? "", text: "text" in r && typeof r.text === "string" ? r.text : "" }));
+    const products = (await exaSearchDepop(key, "gildan hoodie")).filter((r) => /depop\.com\/products\//.test(r.url));
+    const parsed = products.filter((r) => parseDepopResult(r));
     return {
       exa: { ok: products.length > 0, detail: `${products.length} Depop results` },
       depop: { ok: parsed.length > 0, detail: `${parsed.length}/${products.length} listings parsed` },

@@ -1,4 +1,3 @@
-import Exa from "exa-js";
 import type { Analysis, CompListing, Comps } from "@/lib/schema";
 import { COLORS } from "@/lib/depop";
 import { quantile } from "@/lib/pricing";
@@ -239,12 +238,30 @@ type ExaResult = { url: string; title: string; text: string };
 // instance searches again; move to Vercel Runtime Cache if Exa spend still matters.
 const cache = new Map<string, { at: number; results: ExaResult[] }>();
 
-async function searchDepop(exa: Exa, q: string): Promise<ExaResult[]> {
+// One POST to Exa's REST API (was exa-js, which pinned a vulnerable zod and pulled in the openai SDK).
+export async function exaSearchDepop(apiKey: string, query: string): Promise<ExaResult[]> {
+  const res = await fetch("https://api.exa.ai/search", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-api-key": apiKey },
+    body: JSON.stringify({ query, numResults: NUM_RESULTS, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } } }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    // Exa errors come as { error: "..." } or { error: { message } }; keep its text so "credits limit" stays readable.
+    const e = json?.error;
+    throw new Error((typeof e === "string" ? e : e?.message) || json?.message || `Exa search failed (HTTP ${res.status})`);
+  }
+  const rows: { url?: unknown; title?: unknown; text?: unknown }[] = Array.isArray(json?.results) ? json.results : [];
+  return rows.filter((r) => typeof r.url === "string").map((r) => ({
+    url: r.url as string, title: typeof r.title === "string" ? r.title : "", text: typeof r.text === "string" ? r.text : "",
+  }));
+}
+
+async function searchDepop(apiKey: string, q: string): Promise<ExaResult[]> {
   const now = Date.now();
   const hit = cache.get(q);
   if (hit && now - hit.at < CACHE_MS) return hit.results;
-  const res = await exa.search(q, { numResults: NUM_RESULTS, includeDomains: ["depop.com"], contents: { text: { maxCharacters: 1200 } } });
-  const results = (res.results ?? []).map((r) => ({ url: r.url, title: r.title ?? "", text: "text" in r && typeof r.text === "string" ? r.text : "" }));
+  const results = await exaSearchDepop(apiKey, q);
   cache.delete(q); // re-insert so Map order stays oldest-first for eviction
   cache.set(q, { at: now, results });
   if (cache.size > 500) cache.delete(cache.keys().next().value!);
@@ -254,11 +271,10 @@ async function searchDepop(exa: Exa, q: string): Promise<ExaResult[]> {
 export async function getDepopComps(a: Analysis): Promise<{ comps: Comps | null; search: SearchStatus }> {
   const apiKey = process.env.EXA_API_KEY;
   if (!apiKey) return { comps: null, search: searchStatus({ hasKey: false, errors: [], queries: 0, results: 0, parsed: 0, kept: false }) };
-  const exa = new Exa(apiKey);
   // Exact, then broader; brand + type only fills in when those two collapse into one.
   const brandType = /^(unknown|unbranded)$/i.test(a.brand.trim()) ? "" : `${a.brand} ${a.itemType}`;
   const queries = [...new Set([a.searchQuery, a.searchQueryBroad, brandType].map((q) => q.trim().toLowerCase().replace(/\s+/g, " ")).filter(Boolean))].slice(0, MAX_QUERIES);
-  const settled = await Promise.allSettled(queries.map((q) => searchDepop(exa, q)));
+  const settled = await Promise.allSettled(queries.map((q) => searchDepop(apiKey, q)));
   const parsed: ParsedListing[] = [];
   const errors: string[] = [];
   let results = 0;
