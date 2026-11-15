@@ -200,7 +200,7 @@ export default function Home() {
             <button
               onClick={analyze}
               disabled={!photos.length || preparing || status === "loading"}
-              className="flex-1 rounded-xl bg-cherry py-3 font-semibold text-white shadow-sm shadow-cherry/30 transition hover:bg-cherry-dark disabled:opacity-40 disabled:shadow-none"
+              className="flex-1 rounded-xl bg-cherry py-3 font-semibold text-on-cherry shadow-sm shadow-cherry/30 transition hover:bg-cherry-dark disabled:opacity-40 disabled:shadow-none"
             >
               {status === "loading" ? "Analyzing…" : result ? "Re-analyze" : "Analyze"}
             </button>
@@ -307,7 +307,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
               aria-describedby={parsedManual.error ? "manual-comps-error" : undefined}
             />
             <button type="button" onClick={applyManual} disabled={!parsedManual.prices.length}
-              className="shrink-0 rounded-lg bg-cherry px-3 py-1.5 text-sm font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark disabled:opacity-40">
+              className="shrink-0 rounded-lg bg-cherry px-3 py-1.5 text-sm font-semibold text-on-cherry shadow-sm shadow-cherry/30 hover:bg-cherry-dark disabled:opacity-40">
               Update price
             </button>
           </div>
@@ -371,7 +371,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
         <div className="mt-2 flex flex-wrap gap-2">
           {CONDITIONS.map((c) => (
             <button key={c} type="button" onClick={() => set("condition", c)}
-              className={`rounded-full border px-3 py-1 text-sm ${draft.condition === c ? "border-cherry bg-cherry text-white" : "border-line-strong bg-surface"}`}>{c}</button>
+              className={`rounded-full border px-3 py-1 text-sm ${draft.condition === c ? "border-cherry bg-cherry text-on-cherry" : "border-line-strong bg-surface"}`}>{c}</button>
           ))}
         </div>
         <p className="mt-3 text-xs text-muted">
@@ -578,7 +578,7 @@ function Chips({ label, options, value, max, onChange }: { label: string; option
           return (
             <button key={o} type="button" disabled={full}
               onClick={() => onChange(on ? value.filter((x) => x !== o) : [...value, o])}
-              className={`rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-cherry bg-cherry text-white" : "border-line-strong bg-surface"} ${full ? "opacity-40" : ""}`}>
+              className={`rounded-full border px-2.5 py-0.5 text-xs ${on ? "border-cherry bg-cherry text-on-cherry" : "border-line-strong bg-surface"} ${full ? "opacity-40" : ""}`}>
               {o}
             </button>
           );
@@ -593,7 +593,7 @@ function CopyButton({ text, label, primary }: { text: string; label: string; pri
     <button type="button"
       onClick={async () => { try { await navigator.clipboard.writeText(text); setDone(true); setTimeout(() => setDone(false), 1400); } catch { /* clipboard blocked */ } }}
       className={primary
-        ? "shrink-0 rounded-lg bg-cherry px-3 py-1.5 text-sm font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark"
+        ? "shrink-0 rounded-lg bg-cherry px-3 py-1.5 text-sm font-semibold text-on-cherry shadow-sm shadow-cherry/30 hover:bg-cherry-dark"
         : "shrink-0 rounded px-1.5 text-xs font-normal text-muted hover:text-cherry"}>
       {done ? "Copied!" : label}
     </button>

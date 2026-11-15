@@ -22,17 +22,17 @@ export default function AppNav() {
             const on = t.href === "/" ? path === "/" : path.startsWith(t.href);
             return (
               <Link key={t.href} href={t.href} aria-current={on ? "page" : undefined}
-                className={`whitespace-nowrap rounded-full px-2.5 py-1.5 font-semibold transition sm:px-3 ${on ? "bg-cherry text-white shadow-sm shadow-cherry/30" : "text-ink-soft hover:text-cherry"}`}>
+                className={`whitespace-nowrap rounded-full px-2.5 py-1.5 font-semibold transition sm:px-3 ${on ? "bg-cherry text-on-cherry shadow-sm shadow-cherry/30" : "text-ink-soft hover:text-cherry"}`}>
                 <span aria-hidden className="mr-1">{t.icon}</span>
                 <span className="sm:hidden">{t.short}</span><span className="hidden sm:inline">{t.label}</span>
               </Link>
             );
           })}
         </div>
-        <a href={`https://www.depop.com/${SHOP}/`} target="_blank" rel="noopener noreferrer" aria-label={`@${SHOP} on Depop`}
+        <a href={`https://www.depop.com/${SHOP}/`} target="_blank" rel="noopener noreferrer"
           className="flex shrink-0 items-center gap-1.5 rounded-full border border-cherry/25 bg-blush p-0.5 text-xs font-semibold text-cherry hover:border-cherry/50 sm:pr-2.5">
-          <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-full bg-cherry text-[11px] font-bold uppercase text-white">sc</span>
-          <span className="hidden sm:inline">@{SHOP}</span>
+          <span aria-hidden className="flex h-7 w-7 items-center justify-center rounded-full bg-cherry text-[11px] font-bold uppercase text-on-cherry">sc</span>
+          <span className="sr-only sm:not-sr-only">@{SHOP}</span><span className="sr-only"> on Depop</span>
         </a>
       </div>
     </nav>
