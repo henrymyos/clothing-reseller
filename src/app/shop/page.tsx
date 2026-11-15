@@ -316,7 +316,7 @@ function ImportCard({ store, onChange }: { store: InventoryStore | null; onChang
         </div>
         <div className="flex shrink-0 gap-2">
           {store?.sheetUrl && (
-            <button type="button" disabled={busy} onClick={() => void fromLink(store.sheetUrl!)} className="rounded-lg bg-cherry px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark disabled:opacity-50">
+            <button type="button" disabled={busy} onClick={() => void fromLink(store.sheetUrl!)} className="rounded-lg bg-cherry px-3 py-1.5 text-xs font-semibold text-on-cherry shadow-sm shadow-cherry/30 hover:bg-cherry-dark disabled:opacity-50">
               {busy ? "Refreshing…" : "Refresh"}
             </button>
           )}
@@ -329,14 +329,14 @@ function ImportCard({ store, onChange }: { store: InventoryStore | null; onChang
             <p className="font-semibold text-ink">Paste from Google Sheets</p>
             <p className="mt-0.5">In the sheet, click the corner box to select everything, copy (⌘C), and paste here.</p>
             <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={3} placeholder="SOLD?  SKU  NAME  COST  …" className={`${input} mt-1.5 font-mono text-xs`} />
-            <button type="button" disabled={!paste.trim()} onClick={() => take(paste, "pasted sheet")} className="mt-1.5 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-white hover:bg-cherry-dark disabled:opacity-40">Use pasted sheet</button>
+            <button type="button" disabled={!paste.trim()} onClick={() => take(paste, "pasted sheet")} className="mt-1.5 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-on-cherry hover:bg-cherry-dark disabled:opacity-40">Use pasted sheet</button>
           </div>
           <div>
             <p className="font-semibold text-ink">Or link it (refreshes with one tap)</p>
             <p className="mt-0.5">The sheet must be shared as “Anyone with the link — Viewer”. Anyone with the link could then see your costs.</p>
             <div className="mt-1.5 flex gap-2">
               <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className={input} />
-              <button type="button" disabled={!link.trim() || busy} onClick={() => void fromLink(link)} className="shrink-0 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-white hover:bg-cherry-dark disabled:opacity-40">{busy ? "Loading…" : "Load"}</button>
+              <button type="button" disabled={!link.trim() || busy} onClick={() => void fromLink(link)} className="shrink-0 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-on-cherry hover:bg-cherry-dark disabled:opacity-40">{busy ? "Loading…" : "Load"}</button>
             </div>
           </div>
           <div>

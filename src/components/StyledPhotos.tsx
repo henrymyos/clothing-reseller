@@ -57,7 +57,7 @@ export function StyledPhotos({ item, fromNotes = false }: { item: PromptItem; fr
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {STYLE_CHIPS.map((s) => (
                 <button key={s} type="button" aria-pressed={style === s} onClick={() => setStyle(s)}
-                  className={`rounded-full border px-3 py-1 text-xs ${style === s ? "border-cherry bg-cherry text-white" : "border-line-strong bg-surface"}`}>
+                  className={`rounded-full border px-3 py-1 text-xs ${style === s ? "border-cherry bg-cherry text-on-cherry" : "border-line-strong bg-surface"}`}>
                   {s}
                 </button>
               ))}
@@ -131,7 +131,7 @@ function PromptBox({ text }: { text: string }) {
       />
       <div className="mt-2 flex items-center gap-3">
         <button type="button" onClick={copy}
-          className="rounded-lg bg-cherry px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-cherry/30 hover:bg-cherry-dark">
+          className="rounded-lg bg-cherry px-4 py-2 text-sm font-semibold text-on-cherry shadow-sm shadow-cherry/30 hover:bg-cherry-dark">
           {state === "copied" ? "Copied!" : "Copy prompt"}
         </button>
         {state === "selected" && <span role="status" className="text-xs text-honey">Selected: press Copy in the menu (or ⌘/Ctrl+C).</span>}
