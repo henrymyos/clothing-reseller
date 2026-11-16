@@ -68,6 +68,7 @@ beforeEach(() => {
   vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "test-key-not-real");
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -122,14 +123,17 @@ describe("direct Gemini structured output", () => {
 describe("falling back from direct Gemini to the gateway", () => {
   it("moves past free-tier 429s on both direct models to the gateway, and says a backup wrote it", async () => {
     fakeNetwork(() => geminiError(429, "You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.", "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"));
+    vi.useFakeTimers({ toFake: ["setTimeout"] }); // skip the real 1.2 s retry waits
     const used: string[] = [];
-    const { object } = await analyze((id) => used.push(id));
+    const pending = analyze((id) => used.push(id));
+    await vi.runAllTimersAsync();
+    const { object } = await pending;
     expect(object.headline).toBe(`gateway ${PRIMARY_MODEL}`);
     expect(used).toEqual([PRIMARY_MODEL]);
     // One quick retry per direct model, no SDK-level retries on top.
     expect(calls.map((c) => c.url.match(/models\/([^:]+)/)![1])).toEqual(["gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.8-flash"]);
     expect(modelNotice(used)).toMatch(/backup \(Claude Haiku\) wrote this listing/);
-  }, 10_000);
+  });
 
   it("doesn't retry a used-up daily quota, and tries Flash next", async () => {
     fakeNetwork((model) => model === "gemini-3.5-flash-lite"
