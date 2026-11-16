@@ -23,7 +23,10 @@ beforeEach(() => {
   resetModelSkips();
   vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "");
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
+});
 
 describe("model chain", () => {
   it("is the gateway chain, unchanged, without a Google key", () => {
@@ -85,15 +88,17 @@ describe("model fallback with a Google key", () => {
   });
 
   it("falls through to the gateway when both direct models are rate-limited (one quick retry each)", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] }); // skip the real 1.2 s retry waits
     const tried: string[] = [];
-    const out = await withModelFallback(async (_m, _s, id) => {
+    const pending = withModelFallback(async (_m, _s, id) => {
       tried.push(id);
       if (id.startsWith("google-direct/")) throw google429(false);
       return `from ${id}`;
     });
-    expect(out).toBe(`from ${PRIMARY_MODEL}`);
+    await vi.runAllTimersAsync();
+    expect(await pending).toBe(`from ${PRIMARY_MODEL}`);
     expect(tried).toEqual([DIRECT_LITE, DIRECT_LITE, DIRECT_FLASH, DIRECT_FLASH, PRIMARY_MODEL]);
-  }, 10_000);
+  });
 
   it("skips a used-up daily quota without retrying, and remembers it on the next call", async () => {
     const tried: string[] = [];
