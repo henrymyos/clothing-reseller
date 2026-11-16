@@ -18,11 +18,16 @@ const fraunces = Fraunces({
   subsets: ["latin"],
 });
 
+const description =
+  "Photograph a clothing item and get a ready-to-post Depop listing: description, measurements, condition, tags, a price from matching Depop listings, and your take-home profit.";
+
 export const metadata: Metadata = {
   title: "SnapList — @soldbychica",
-  description:
-    "Photograph a clothing item and get a ready-to-post Depop listing: description, measurements, condition, tags, a price from matching Depop listings, and your take-home profit.",
+  description,
   appleWebApp: { capable: true, title: "SnapList", statusBarStyle: "default" },
+  // Link previews (iMessage, Slack, Discord): text card, no image.
+  openGraph: { title: "SnapList", description, siteName: "SnapList", type: "website" },
+  twitter: { card: "summary", title: "SnapList", description },
 };
 
 export default function RootLayout({
