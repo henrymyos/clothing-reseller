@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe("direct Gemini structured output", () => {
-  it("sends the analysis schema as Gemini's responseSchema, with the photo inline, and parses the answer", async () => {
+  it("sends the analysis schema as Gemini's responseJsonSchema, with the photo inline, and parses the answer", async () => {
     fakeNetwork(() => geminiReply(ANALYSIS));
     const used: string[] = [];
     const { object } = await analyze((id) => used.push(id));
@@ -86,16 +86,17 @@ describe("direct Gemini structured output", () => {
     const { url, body, apiKey } = calls[0];
     expect(url).toContain("/models/gemini-3.5-flash-lite:generateContent");
     expect(apiKey).toBe("test-key-not-real");
-    const config = body.generationConfig as { responseMimeType: string; responseSchema: { type: string; required: string[]; properties: Record<string, { type?: string; enum?: string[]; items?: { enum?: string[] } }> } };
+    const config = body.generationConfig as { responseMimeType: string; responseJsonSchema: { type: string; required: string[]; properties: Record<string, { type?: string; enum?: string[]; items?: { enum?: string[] } }> } };
     expect(config.responseMimeType).toBe("application/json");
-    const schema = config.responseSchema;
+    const schema = config.responseJsonSchema;
     expect(schema.type).toBe("object");
     expect(schema.required).toEqual(expect.arrayContaining(Object.keys(ANALYSIS)));
     expect(schema.properties.condition.enum).toContain("Used - Excellent");
     expect(schema.properties.keywords.items?.enum).toContain("thermal");
     expect(schema.properties.estimatedWeightOz.type).toBe("number");
-    // Nothing Gemini's OpenAPI-style schema rejects.
-    expect(JSON.stringify(schema)).not.toMatch(/"\$schema"|"additionalProperties"|"\$ref"/);
+    // @ai-sdk/google 4 sends plain JSON Schema (responseJsonSchema), no OpenAPI-style responseSchema.
+    expect(config).not.toHaveProperty("responseSchema");
+    expect(JSON.stringify(schema)).not.toMatch(/"\$ref"/);
     const parts = (body.contents as { parts: Record<string, unknown>[] }[])[0].parts;
     expect(parts).toContainEqual({ inlineData: { mimeType: "image/jpeg", data: PHOTO.split(",")[1] } });
   });
@@ -105,8 +106,8 @@ describe("direct Gemini structured output", () => {
     const { object } = await withModelFallback((model, abortSignal) =>
       generateObject({ model, abortSignal, maxRetries: 0, temperature: 0, schema: pricingSchema, prompt: "Price this item." }));
     expect(object.suggestedPrice).toBe(20);
-    const config = calls[0].body.generationConfig as { responseSchema: { required: string[] } };
-    expect(config.responseSchema.required).toEqual(["priceLow", "priceHigh", "suggestedPrice", "priceReasoning"]);
+    const config = calls[0].body.generationConfig as { responseJsonSchema: { required: string[] } };
+    expect(config.responseJsonSchema.required).toEqual(["priceLow", "priceHigh", "suggestedPrice", "priceReasoning"]);
   });
 
   it("trims over-long lists (Gemini isn't told array lengths) instead of failing the call", async () => {

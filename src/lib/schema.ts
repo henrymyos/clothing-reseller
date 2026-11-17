@@ -98,9 +98,9 @@ export type AnalyzeResponse = Analysis & {
   modelPrice: { suggested: number; low: number; high: number }; // the AI's price before anchoring, so the page can re-price with comps she adds
 };
 
-// Array length limits in analysisSchema. Direct Gemini's structured output can't be
-// told an array's length (the Google provider drops minItems/maxItems when it converts
-// the schema), so an over-long list would fail validation and waste the whole call.
+// Array length limits in analysisSchema. @ai-sdk/google 4 now sends maxItems to Gemini
+// (responseJsonSchema), but models can still overshoot, and an over-long list would fail
+// validation and waste the whole call, so the repair hook below stays.
 const ANALYSIS_ARRAY_MAX: Partial<Record<keyof Analysis, number>> = {
   distinctiveFeatures: 5,
   visibleFlaws: 6,
