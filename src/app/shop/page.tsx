@@ -328,14 +328,14 @@ function ImportCard({ store, onChange }: { store: InventoryStore | null; onChang
           <div>
             <p className="font-semibold text-ink">Paste from Google Sheets</p>
             <p className="mt-0.5">In the sheet, click the corner box to select everything, copy (⌘C), and paste here.</p>
-            <textarea value={paste} onChange={(e) => setPaste(e.target.value)} rows={3} placeholder="SOLD?  SKU  NAME  COST  …" className={`${input} mt-1.5 font-mono text-xs`} />
+            <textarea aria-label="Paste from Google Sheets" value={paste} onChange={(e) => setPaste(e.target.value)} rows={3} placeholder="SOLD?  SKU  NAME  COST  …" className={`${input} mt-1.5 font-mono text-xs`} />
             <button type="button" disabled={!paste.trim()} onClick={() => take(paste, "pasted sheet")} className="mt-1.5 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-on-cherry hover:bg-cherry-dark disabled:opacity-40">Use pasted sheet</button>
           </div>
           <div>
             <p className="font-semibold text-ink">Or link it (refreshes with one tap)</p>
             <p className="mt-0.5">The sheet must be shared as “Anyone with the link — Viewer”. Anyone with the link could then see your costs.</p>
             <div className="mt-1.5 flex gap-2">
-              <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className={input} />
+              <input aria-label="Google Sheet link" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://docs.google.com/spreadsheets/d/…" className={input} />
               <button type="button" disabled={!link.trim() || busy} onClick={() => void fromLink(link)} className="shrink-0 rounded-lg bg-cherry px-3 py-2 text-xs font-semibold text-on-cherry hover:bg-cherry-dark disabled:opacity-40">{busy ? "Loading…" : "Load"}</button>
             </div>
           </div>
@@ -546,11 +546,11 @@ function AllItems({ items }: { items: ItemCalc[] }) {
     <Card>
       <Label>Every item</Label>
       <div className="mt-3 flex flex-wrap gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or SKU" className={`${input} min-w-0 basis-full sm:basis-auto sm:flex-1`} />
-        <select value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} className={inline}>
+        <input aria-label="Search name or SKU" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or SKU" className={`${input} min-w-0 basis-full sm:basis-auto sm:flex-1`} />
+        <select aria-label="Filter items" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} className={inline}>
           <option value="all">All</option><option value="sold">Sold</option><option value="unsold">Unsold</option>
         </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} className={inline}>
+        <select aria-label="Sort items" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className={inline}>
           <option value="recent">Newest</option><option value="profit">Most profit</option><option value="roi">Best return</option>
           <option value="days">Fastest sold</option><option value="age">Listed longest</option>
         </select>

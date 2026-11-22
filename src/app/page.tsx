@@ -183,7 +183,7 @@ export default function Home() {
             className="hidden"
             onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ""; }}
           />
-          <textarea
+          <textarea aria-label="Notes for the AI"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             maxLength={500}
@@ -345,7 +345,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
       <Card>
         <div className="flex items-center justify-between gap-3">
           <Label>Measurements</Label>
-          <select value={draft.measurementKind} onChange={(e) => set("measurementKind", e.target.value as MeasurementKind)} className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-sm">
+          <select aria-label="Measurement type" value={draft.measurementKind} onChange={(e) => set("measurementKind", e.target.value as MeasurementKind)} className="rounded-lg border border-line-strong bg-surface px-2 py-1 text-sm">
             {MEASUREMENT_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
           </select>
         </div>
@@ -380,7 +380,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
         <div className="mt-2 space-y-2">
           {draft.flaws.map((f, i) => (
             <div key={i} className="flex gap-2">
-              <input value={f} onChange={(e) => set("flaws", draft.flaws.map((x, j) => (j === i ? e.target.value : x)))} className={input} />
+              <input aria-label={`Flaw ${i + 1}`} value={f} onChange={(e) => set("flaws", draft.flaws.map((x, j) => (j === i ? e.target.value : x)))} className={input} />
               <button type="button" onClick={() => set("flaws", draft.flaws.filter((_, j) => j !== i))} className="rounded-lg border border-line-strong px-3 text-sm" aria-label="Remove flaw">×</button>
             </div>
           ))}
@@ -430,7 +430,7 @@ function Results({ result, draft, setDraft }: { result: AnalyzeResponse; draft: 
             <label className="flex items-center gap-2"><input type="checkbox" checked={boosted} onChange={(e) => setBoosted(e.target.checked)} /> Boosted listing</label>
             <label className="flex items-center gap-2"><input type="checkbox" checked={sellerPaysShipping} onChange={(e) => setSellerPaysShipping(e.target.checked)} /> I pay shipping</label>
             {sellerPaysShipping && (
-              <input inputMode="decimal" placeholder="Label cost $" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} className={input} />
+              <input aria-label="Label cost" inputMode="decimal" placeholder="Label cost $" value={shippingCost} onChange={(e) => setShippingCost(e.target.value)} className={input} />
             )}
           </div>
         </div>
