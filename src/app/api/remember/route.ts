@@ -13,7 +13,7 @@ export function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { inventory?: unknown; sales?: unknown };
+  const body = ((await req.json().catch(() => null)) ?? {}) as { inventory?: unknown; sales?: unknown }; // a "null" body parses fine
   const parts = [body.inventory === true && "inventory", body.sales === true && "sales"].filter(Boolean).join(",");
   const res = NextResponse.json({ ok: true });
   if (parts) res.cookies.set(COOKIE, parts, { maxAge: MAX_AGE, httpOnly: true, sameSite: "lax", secure: true, path: "/" });
