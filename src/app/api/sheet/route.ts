@@ -19,10 +19,28 @@ export async function GET(req: NextRequest) {
         { status: 403 },
       );
     }
-    const text = await res.text();
-    if (text.length > MAX_BYTES) return NextResponse.json({ error: "That sheet is too large to import." }, { status: 413 });
+    const text = await readCapped(res, MAX_BYTES);
+    if (text === null) return NextResponse.json({ error: "That sheet is too large to import." }, { status: 413 });
     return new NextResponse(text, { headers: { "content-type": "text/csv; charset=utf-8", "cache-control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "Google Sheets didn't respond — try again." }, { status: 502 });
   }
+}
+
+// Stops reading once the body passes max bytes, so a huge public sheet never sits
+// whole in the function's memory; null means it was too large.
+async function readCapped(res: Response, max: number): Promise<string | null> {
+  if (Number(res.headers.get("content-length") ?? 0) > max) { await res.body?.cancel(); return null; }
+  if (!res.body) return "";
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) { await reader.cancel(); return null; }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
