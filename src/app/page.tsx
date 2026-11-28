@@ -149,13 +149,16 @@ export default function Home() {
               <div key={i} className="relative aspect-square overflow-hidden rounded-xl border border-line bg-cream">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={src} alt={`photo ${i + 1}`} className="h-full w-full object-cover" />
-                {i === 0 && <span className="absolute left-1.5 top-1.5 rounded-md bg-ink/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">Cover</span>}
+                {i === 0 && <span className="absolute left-1.5 top-1.5 rounded-md bg-ink/75 px-1.5 py-0.5 text-xs font-semibold text-white">Cover</span>}
                 <button
                   type="button"
                   onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
-                  className="absolute right-1.5 top-1.5 h-6 w-6 rounded-full bg-ink/75 text-sm leading-none text-white"
+                  className="absolute right-0 top-0 flex h-11 w-11 items-start justify-end p-1.5"
                   aria-label={`Remove photo ${i + 1}`}
-                >×</button>
+                >
+                  {/* 24 px dot inside a 44 px tap area */}
+                  <span aria-hidden className="flex h-6 w-6 items-center justify-center rounded-full bg-ink/75 text-sm leading-none text-white">×</span>
+                </button>
               </div>
             ))}
             {photos.length < MAX_PHOTOS && (
