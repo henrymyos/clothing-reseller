@@ -362,7 +362,7 @@ function ImportCard({ store, onChange }: { store: InventoryStore | null; onChang
 function Tile({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: "good" | "bad" }) {
   return (
     <div className="rounded-xl border border-line bg-surface p-3">
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</p>
+      <p className="text-xs font-medium uppercase tracking-wide text-muted">{label}</p>
       <p className={`mt-0.5 text-xl font-bold ${tone === "good" ? "text-sage" : tone === "bad" ? "text-cherry" : ""}`}>{value}</p>
       {sub && <p className="text-xs text-muted">{sub}</p>}
     </div>
